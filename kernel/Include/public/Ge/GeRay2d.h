@@ -24,6 +24,11 @@ public:
     // Assignment operator.
     //
     GeRay2d& operator =  (const GeRay2d& line);
+
+    // Interval.
+    //
+    void getInterval(GeInterval& range) const override;
+    void getInterval(GeInterval& range, GePoint2d& startPoint, GePoint2d& endPoint) const override;
 };
 
 #endif

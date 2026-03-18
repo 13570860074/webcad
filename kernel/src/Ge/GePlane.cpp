@@ -16,11 +16,13 @@ const GePlane GePlane::kZXPlane = GePlane(GePoint3d::kOrigin, GeVector3d::kYAxis
 
 GePlane::GePlane() {
 	GE_IMP_MEMORY_ENTITY(GePlane);
+	this->set(GePoint3d::kOrigin, GeVector3d::kZAxis);
 }
 GePlane::GePlane(const GePlane& src) {
 	GE_IMP_MEMORY_ENTITY(GePlane);
 
 	this->set(src.pointOnPlane(), src.normal());
+	GE_IMP_PLANE(this->m_pImpl)->isNormalReversed = GE_IMP_PLANE(src.m_pImpl)->isNormalReversed;
 }
 GePlane::GePlane(const GePoint3d& origin, const GeVector3d& normal) {
 	GE_IMP_MEMORY_ENTITY(GePlane);
@@ -55,7 +57,26 @@ bool GePlane::intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& resultPnt) c
 	return this->intersectWith(linEnt, resultPnt, GeContext::gTol);
 }
 bool GePlane::intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& resultPnt, const GeTol& tol) const {
-	return false;
+	GeVector3d normal = this->normal();
+	GeVector3d direction = linEnt.direction();
+	if (direction.length() < tol.equalVector()) {
+		return false;
+	}
+
+	GeVector3d offset = linEnt.pointOnLine() - this->pointOnPlane();
+	double denom = normal.dotProduct(direction);
+	double numer = normal.dotProduct(offset);
+
+	if (fabs(denom) <= tol.equalVector()) {
+		return false;
+	}
+
+	double lineParam = -numer / denom;
+	resultPnt = linEnt.pointOnLine() + direction * lineParam;
+	if (this->isOn(resultPnt, tol) == false) {
+		return false;
+	}
+	return linEnt.isOn(resultPnt, tol);
 }
 bool GePlane::intersectWith(const GePlane& otherPln, GeLine3d& resultLine) const {
 	return this->intersectWith(otherPln, resultLine, GeContext::gTol);
@@ -298,26 +319,28 @@ GePlane& GePlane::operator = (const GePlane& src) {
 	GE_IMP_PLANE(this->m_pImpl)->normal = GE_IMP_PLANE(src.m_pImpl)->normal;
 	GE_IMP_PLANE(this->m_pImpl)->xAxis = GE_IMP_PLANE(src.m_pImpl)->xAxis;
 	GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(src.m_pImpl)->yAxis;
+	GE_IMP_PLANE(this->m_pImpl)->isNormalReversed = GE_IMP_PLANE(src.m_pImpl)->isNormalReversed;
 	return *this;
 }
 
 
 
 bool GePlane::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
-		return true;
-	}
-	return false;
+	return entType == Ge::EntityId::kEntity3d
+		|| entType == Ge::EntityId::kSurface
+		|| entType == Ge::EntityId::kPlanarEnt
+		|| entType == this->type();
 }
 Ge::EntityId GePlane::type() const {
 	return Ge::EntityId::kPlane;
 }
 GePlane* GePlane::copy() const {
 	GePlane* pPlane = new GePlane();
-	GE_IMP_PLANE(pPlane->m_pImpl)->origin = GE_IMP_PLANE(pPlane->m_pImpl)->origin;
-	GE_IMP_PLANE(pPlane->m_pImpl)->normal = GE_IMP_PLANE(pPlane->m_pImpl)->normal;
-	GE_IMP_PLANE(pPlane->m_pImpl)->xAxis = GE_IMP_PLANE(pPlane->m_pImpl)->xAxis;
-	GE_IMP_PLANE(pPlane->m_pImpl)->yAxis = GE_IMP_PLANE(pPlane->m_pImpl)->yAxis;
+	GE_IMP_PLANE(pPlane->m_pImpl)->origin = GE_IMP_PLANE(this->m_pImpl)->origin;
+	GE_IMP_PLANE(pPlane->m_pImpl)->normal = GE_IMP_PLANE(this->m_pImpl)->normal;
+	GE_IMP_PLANE(pPlane->m_pImpl)->xAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis;
+	GE_IMP_PLANE(pPlane->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->yAxis;
+	GE_IMP_PLANE(pPlane->m_pImpl)->isNormalReversed = GE_IMP_PLANE(this->m_pImpl)->isNormalReversed;
 	return pPlane;
 }
 bool GePlane::operator == (const GePlane& entity) const {
@@ -340,19 +363,19 @@ bool GePlane::isEqualTo(const GePlane& entity, const GeTol& tol) const {
 }
 GePlane& GePlane::transformBy(const GeMatrix3d& xfm) {
 	GePoint3d origin = this->pointOnPlane();
-	GePoint3d xPoint = origin + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis;
-	GePoint3d yPoint = origin + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis;
-	GePoint3d zPoint = origin + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal;
+	GePoint3d xPoint = origin + GE_IMP_PLANE(this->m_pImpl)->xAxis;
+	GePoint3d yPoint = origin + GE_IMP_PLANE(this->m_pImpl)->yAxis;
+	GePoint3d zPoint = origin + GE_IMP_PLANE(this->m_pImpl)->normal;
 
 	origin.transformBy(xfm);
 	xPoint.transformBy(xfm);
 	yPoint.transformBy(xfm);
 	zPoint.transformBy(xfm);
 
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin = origin;
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = xPoint - origin;
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = yPoint - origin;
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = zPoint - origin;
+	GE_IMP_PLANE(this->m_pImpl)->origin = origin;
+	GE_IMP_PLANE(this->m_pImpl)->xAxis = xPoint - origin;
+	GE_IMP_PLANE(this->m_pImpl)->yAxis = yPoint - origin;
+	GE_IMP_PLANE(this->m_pImpl)->normal = zPoint - origin;
 
 	return *this;
 }
@@ -383,13 +406,19 @@ GePlane& GePlane::rotateBy(double angle, const GeVector3d& vec, const GePoint3d&
 }
 GePlane& GePlane::mirror(const GePlane& plane) {
 
-	GePoint3d p1 = this->pointOnPlane();
-	GePoint3d p2 = p1 + this->normal();
-	p1.mirror(plane);
-	p2.mirror(plane);
+	GePoint3d origin = this->pointOnPlane();
+	GePoint3d xPoint = origin + GE_IMP_PLANE(this->m_pImpl)->xAxis;
+	GePoint3d yPoint = origin + GE_IMP_PLANE(this->m_pImpl)->yAxis;
+	GePoint3d zPoint = origin + GE_IMP_PLANE(this->m_pImpl)->normal;
+	origin.mirror(plane);
+	xPoint.mirror(plane);
+	yPoint.mirror(plane);
+	zPoint.mirror(plane);
 
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin = p1;
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = p2 - p1;
+	GE_IMP_PLANE(this->m_pImpl)->origin = origin;
+	GE_IMP_PLANE(this->m_pImpl)->xAxis = xPoint - origin;
+	GE_IMP_PLANE(this->m_pImpl)->yAxis = yPoint - origin;
+	GE_IMP_PLANE(this->m_pImpl)->normal = zPoint - origin;
 
 	return *this;
 }
@@ -428,22 +457,17 @@ GePoint2d GePlane::paramOf(const GePoint3d& pnt) const {
 	return this->paramOf(pnt, GeContext::gTol);
 }
 GePoint2d GePlane::paramOf(const GePoint3d& pnt, const GeTol& tol) const {
-
-	//获得坐标系
-	GePoint3d origin;
-	GeVector3d xAxis, yAxis;
-	this->getCoordSystem(origin, xAxis, yAxis);
-	yAxis = xAxis.crossProduct(this->normal()).normal();
-
-	//获得矩阵
-	GeMatrix3d mat;
-	mat.setToAlignCoordSys(this->pointOnPlane(), xAxis, yAxis, this->normal(),
-		GePoint3d::kOrigin, GeVector3d::kXAxis, GeVector3d::kYAxis, GeVector3d::kZAxis);
-
-	GePoint3d point = pnt;
-	point.transformBy(mat);
-
-	return GePoint2d(point.x, point.y);
+	GeVector3d offset = pnt - GE_IMP_PLANE(this->m_pImpl)->origin;
+	GeVector3d vCrossProdNormal = GE_IMP_PLANE(this->m_pImpl)->yAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
+	GeVector3d normalCrossProdU = GE_IMP_PLANE(this->m_pImpl)->normal.crossProduct(GE_IMP_PLANE(this->m_pImpl)->xAxis);
+	double tripleProduct = vCrossProdNormal.dotProduct(GE_IMP_PLANE(this->m_pImpl)->xAxis);
+	if (fabs(tripleProduct) <= 1.0e-300)
+	{
+		return GePoint2d();
+	}
+	return GePoint2d(
+		offset.dotProduct(vCrossProdNormal) / tripleProduct,
+		offset.dotProduct(normalCrossProdU) / tripleProduct);
 }
 bool GePlane::isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const {
 	return this->isOn(pnt, paramPoint, GeContext::gTol);
@@ -481,23 +505,23 @@ double GePlane::distanceTo(const GePoint3d& pnt, const GeTol& tol) const {
 	return point.distanceTo(pnt);
 }
 bool GePlane::isNormalReversed() const {
-	return GE_IMP_PLANE(this->m_pImpl)->isNormalReversed;
+	return this->isLeftHanded();
+}
+bool GePlane::isLeftHanded() const {
+	return GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->yAxis).dotProduct(GE_IMP_PLANE(this->m_pImpl)->normal) < 0.0;
 }
 GeSurface& GePlane::reverseNormal() {
-	if (GE_IMP_PLANE(this->m_pImpl)->isNormalReversed == false) {
-		GE_IMP_PLANE(this->m_pImpl)->isNormalReversed = true;
-	}
-	else {
-		GE_IMP_PLANE(this->m_pImpl)->isNormalReversed = false;
-	}
 	GE_IMP_PLANE(this->m_pImpl)->normal.negate();
 	return *this;
 }
+void GePlane::getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const {
+	rangeU.set();
+	rangeV.set();
+}
 GePoint3d GePlane::evalPoint(const GePoint2d& param) const {
-	GePointOnSurface surface;
-	surface.setSurface(*this);
-	surface.setParameter(param);
-	return surface.point();
+	return GE_IMP_PLANE(this->m_pImpl)->origin
+		+ GE_IMP_PLANE(this->m_pImpl)->xAxis * param.x
+		+ GE_IMP_PLANE(this->m_pImpl)->yAxis * param.y;
 }
 
 
@@ -737,6 +761,12 @@ GePoint3d GePlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln, GePoi
 		return closest;
 	}
 
+	GeLineSeg3d intersectLine;
+	if (this->intersectWith(otherPln, intersectLine, tol) == true) {
+		pointOnOtherPln = intersectLine.startPoint();
+		return intersectLine.startPoint();
+	}
+
 	GePoint3d origin;
 	GeVector3d xAxis, yAxis;
 	otherPln.get(origin, xAxis, yAxis);
@@ -798,25 +828,25 @@ bool GePlane::isParallelTo(const GeBoundedPlane& otherPlnEnt, const GeTol& tol) 
 	return true;
 }
 bool GePlane::isPerpendicularTo(const GeLine3d& linEnt) const{
-	return this->isParallelTo(linEnt, GeContext::gTol);
+	return this->isPerpendicularTo(linEnt, GeContext::gTol);
 }
 bool GePlane::isPerpendicularTo(const GeLine3d& linEnt, const GeTol& tol) const{
 	return linEnt.direction().isParallelTo(this->normal(), tol);
 }
 bool GePlane::isPerpendicularTo(const GeLineSeg3d& linEnt) const{
-	return this->isParallelTo(linEnt, GeContext::gTol);
+	return this->isPerpendicularTo(linEnt, GeContext::gTol);
 }
 bool GePlane::isPerpendicularTo(const GeLineSeg3d& linEnt, const GeTol& tol) const{
 	return linEnt.direction().isParallelTo(this->normal(), tol);
 }
 bool GePlane::isPerpendicularTo(const GeRay3d& linEnt) const{
-	return this->isParallelTo(linEnt, GeContext::gTol);
+	return this->isPerpendicularTo(linEnt, GeContext::gTol);
 }
 bool GePlane::isPerpendicularTo(const GeRay3d& linEnt, const GeTol& tol) const{
 	return linEnt.direction().isParallelTo(this->normal(), tol);
 }
 bool GePlane::isPerpendicularTo(const GePlane& otherPlnEnt) const{
-	return this->isParallelTo(otherPlnEnt, GeContext::gTol);
+	return this->isPerpendicularTo(otherPlnEnt, GeContext::gTol);
 }
 bool GePlane::isPerpendicularTo(const GePlane& otherPlnEnt, const GeTol& tol) const{
 	return otherPlnEnt.normal().isPerpendicularTo(this->normal(), tol);
@@ -828,7 +858,7 @@ bool GePlane::isPerpendicularTo(const GeBoundedPlane& otherPlnEnt, const GeTol& 
 	return otherPlnEnt.normal().isPerpendicularTo(this->normal(), tol);
 }
 bool GePlane::isCoplanarTo(const GePlane& otherPlnEnt) const{
-	return this->isParallelTo(otherPlnEnt, GeContext::gTol);
+	return this->isCoplanarTo(otherPlnEnt, GeContext::gTol);
 }
 bool GePlane::isCoplanarTo(const GePlane& otherPlnEnt, const GeTol& tol) const {
 	if (this->isParallelTo(otherPlnEnt, tol) == false) {
@@ -840,7 +870,7 @@ bool GePlane::isCoplanarTo(const GePlane& otherPlnEnt, const GeTol& tol) const {
 	return true;
 }
 bool GePlane::isCoplanarTo(const GeBoundedPlane& otherPlnEnt) const {
-	return this->isParallelTo(otherPlnEnt, GeContext::gTol);
+	return this->isCoplanarTo(otherPlnEnt, GeContext::gTol);
 }
 bool GePlane::isCoplanarTo(const GeBoundedPlane& otherPlnEnt, const GeTol& tol) const {
 	if (this->isParallelTo(otherPlnEnt, tol) == false) {

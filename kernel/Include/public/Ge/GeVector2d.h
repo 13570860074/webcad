@@ -18,9 +18,9 @@ public:
 
     // The additive identity, x-axis, and y-axis.
     //
-    static const GeVector2d kIdentity;
-    static const GeVector2d kXAxis;
-    static const GeVector2d kYAxis;
+    GE_STATIC_EXPORT static const GeVector2d kIdentity;
+    GE_STATIC_EXPORT static const GeVector2d kXAxis;
+    GE_STATIC_EXPORT static const GeVector2d kYAxis;
 
     // Matrix multiplication.
     //

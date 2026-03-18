@@ -12,8 +12,10 @@ public:
 	typedef bool (*Comp)(T, T);
 
 public:
-	AcArray(unsigned int count = NULL) {
-		
+	AcArray(unsigned int count = 0) {
+		if (count > 0) {
+			this->list.reserve(count);
+		}
 	}
 	virtual ~AcArray() {}
 

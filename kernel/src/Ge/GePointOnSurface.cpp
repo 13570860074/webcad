@@ -1,7 +1,5 @@
 #include "GePointOnSurface.h"
-#include "GeMatrix3d.h"
-#include "GePoint2d.h"
-#include "GePlane.h"
+#include "GeSurface.h"
 #include "GeImpl.h"
 
 
@@ -10,6 +8,8 @@ GePointOnSurface::GePointOnSurface() {
 }
 GePointOnSurface::GePointOnSurface(const GeSurface& surf) {
 	GE_IMP_MEMORY_ENTITY(GePointOnSurface);
+
+	this->setSurface(surf);
 }
 GePointOnSurface::GePointOnSurface(const GeSurface& surf, const GePoint2d& param) {
 	GE_IMP_MEMORY_ENTITY(GePointOnSurface);
@@ -20,11 +20,15 @@ GePointOnSurface::GePointOnSurface(const GeSurface& surf, const GePoint2d& param
 GePointOnSurface::GePointOnSurface(const GePointOnSurface& src) {
 	GE_IMP_MEMORY_ENTITY(GePointOnSurface);
 
-	this->setSurface(*src.surface());
+	if (src.surface() != nullptr) {
+		this->setSurface(*src.surface());
+	}
 	this->setParameter(src.parameter());
 }
 GePointOnSurface& GePointOnSurface::operator = (const GePointOnSurface& src) {
-	this->setSurface(*src.surface());
+	if (src.surface() != nullptr) {
+		this->setSurface(*src.surface());
+	}
 	this->setParameter(src.parameter());
 	return *this;
 }
@@ -35,73 +39,19 @@ GePoint2d GePointOnSurface::parameter() const {
 	return GE_IMP_POINTONSURFACE(this->m_pImpl)->param;
 }
 GePoint3d GePointOnSurface::point() const {
-	GePoint3d pos;
-
-	if (this->surface()->type() == Ge::EntityId::kPlane) {
-
-		GePlane* plane = (GePlane*)this->surface();
-
-		//获得坐标系
-		GePoint3d origin;
-		GeVector3d xAxis, yAxis;
-		plane->getCoordSystem(origin, xAxis, yAxis);
-		yAxis = xAxis.crossProduct(plane->normal()).normal();
-
-		//通过坐标系获得矩阵
-		GeMatrix3d mat;
-		mat.setCoordSystem(origin, xAxis, yAxis, plane->normal());
-
-		//二维点转三维点
-		pos = GePoint3d(this->parameter().x, this->parameter().y, 0.0).transformBy(mat);
+	if (this->surface() == nullptr) {
+		return GePoint3d::kOrigin;
 	}
-
-	return pos;
+	return this->point(this->parameter());
 }
-GePoint3d GePointOnSurface::point(const GePoint2d& param) {
-	GePoint3d pos;
-
-	if (this->surface()->type() == Ge::EntityId::kPlane) {
-
-		GePlane* plane = (GePlane*)this->surface();
-
-		//获得坐标系
-		GePoint3d origin;
-		GeVector3d xAxis, yAxis;
-		plane->getCoordSystem(origin, xAxis, yAxis);
-		yAxis = xAxis.crossProduct(plane->normal()).normal();
-
-		//通过坐标系获得矩阵
-		GeMatrix3d mat;
-		mat.setCoordSystem(origin, xAxis, yAxis, plane->normal());
-
-		//二维点转三维点
-		pos = GePoint3d(param.x, param.y, 0.0).transformBy(mat);
+GePoint3d GePointOnSurface::point(const GePoint2d& param) const {
+	if (this->surface() == nullptr) {
+		return GePoint3d::kOrigin;
 	}
-
-	return pos;
+	return this->point(*this->surface(), param);
 }
-GePoint3d GePointOnSurface::point(const GeSurface& surf, const GePoint2d& param) {
-	GePoint3d pos;
-
-	if (surf.type() == Ge::EntityId::kPlane) {
-
-		GePlane* plane = (GePlane*&)surf;
-
-		//获得坐标系
-		GePoint3d origin;
-		GeVector3d xAxis, yAxis;
-		plane->getCoordSystem(origin, xAxis, yAxis);
-		yAxis = xAxis.crossProduct(plane->normal()).normal();
-
-		//通过坐标系获得矩阵
-		GeMatrix3d mat;
-		mat.setCoordSystem(origin, xAxis, yAxis, plane->normal());
-
-		//二维点转三维点
-		pos = GePoint3d(param.x, param.y, 0.0).transformBy(mat);
-	}
-
-	return pos;
+GePoint3d GePointOnSurface::point(const GeSurface& surf, const GePoint2d& param) const {
+	return surf.evalPoint(param);
 }
 GePointOnSurface& GePointOnSurface::setSurface(const GeSurface& surf) {
 	GE_IMP_POINTONSURFACE(this->m_pImpl)->surface = &surf;
@@ -116,17 +66,18 @@ GePointOnSurface& GePointOnSurface::setParameter(const GePoint2d& param) {
 
 
 bool GePointOnSurface::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
-		return true;
-	}
-	return false;
+	return entType == Ge::EntityId::kEntity3d
+		|| entType == Ge::EntityId::kPointEnt3d
+		|| entType == this->type();
 }
 Ge::EntityId GePointOnSurface::type() const {
 	return Ge::EntityId::kPointOnSurface;
 }
 GePointOnSurface* GePointOnSurface::copy() const {
 	GePointOnSurface* pointOnSurface = new GePointOnSurface();
-	pointOnSurface->setSurface(*this->surface());
+	if (this->surface() != nullptr) {
+		pointOnSurface->setSurface(*this->surface());
+	}
 	pointOnSurface->setParameter(this->parameter());
 	return pointOnSurface;
 }
@@ -173,7 +124,10 @@ bool GePointOnSurface::isOn(const GePoint3d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GePointOnSurface::isOn(const GePoint3d& pnt, const GeTol& tol) const {
-	return false;
+	if (this->surface() == nullptr) {
+		return false;
+	}
+	return this->point().isEqualTo(pnt, tol);
 }
 
 

@@ -26,7 +26,7 @@ public:
 
     // The multiplicative identity.
     //
-    static const GeMatrix2d kIdentity;
+    GE_STATIC_EXPORT static const GeMatrix2d kIdentity;
 
 
     void set(const GeMatrix2d& mat);

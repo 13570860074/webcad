@@ -29,9 +29,9 @@ public:
 
     // Functions to evaluate a point.
     //
-    GePoint2d point();
-    GePoint2d point(double param);
-    GePoint2d point(const GeCurve2d& crv, double param);
+    GePoint2d point() const;
+    GePoint2d point(double param) const;
+    GePoint2d point(const GeCurve2d& crv, double param) const;
 
 
     // Set functions.

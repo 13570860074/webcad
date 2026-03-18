@@ -11,10 +11,29 @@
 #include "GeBoundBlock3d.h"
 #include "GeImpl.h"
 
+namespace {
+void selectClosestPair(const GePoint3dArray& pointItselfs, const GePoint3dArray& pointOthers, GePoint3d& closest, GePoint3d& pntOnOtherCrv)
+{
+	int pairCount = pointItselfs.length();
+	if (pointOthers.length() < pairCount) {
+		pairCount = pointOthers.length();
+	}
+	for (int i = 0; i < pairCount; ++i) {
+		double dist = pointItselfs[i].distanceTo(pointOthers[i]);
+		if (i == 0 || dist < closest.distanceTo(pntOnOtherCrv)) {
+			closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
+			pntOnOtherCrv.set(pointOthers[i].x, pointOthers[i].y, pointOthers[i].z);
+		}
+	}
+}
+}
+
 
 GeLineSeg3d::GeLineSeg3d()
 {
 	GE_IMP_MEMORY_ENTITY(GeLineSeg3d);
+
+	this->set(GePoint3d::kOrigin, GeVector3d::kXAxis);
 }
 GeLineSeg3d::GeLineSeg3d(const GeLineSeg3d& source)
 {
@@ -68,6 +87,7 @@ GePoint3d GeLineSeg3d::baryComb(double blendCoeff) const
 	GePoint3d point = this->startPoint();
 	point.x += blendCoeff * dire.x;
 	point.y += blendCoeff * dire.y;
+	point.z += blendCoeff * dire.z;
 	return point;
 }
 
@@ -81,6 +101,7 @@ GePoint3d GeLineSeg3d::midPoint() const
 	GePoint3d point;
 	point.x = GE_IMP_LINESEG3D(this->m_pImpl)->origin.x + GE_IMP_LINESEG3D(this->m_pImpl)->vector.x / 2;
 	point.y = GE_IMP_LINESEG3D(this->m_pImpl)->origin.y + GE_IMP_LINESEG3D(this->m_pImpl)->vector.y / 2;
+	point.z = GE_IMP_LINESEG3D(this->m_pImpl)->origin.z + GE_IMP_LINESEG3D(this->m_pImpl)->vector.z / 2;
 	return point;
 }
 GePoint3d GeLineSeg3d::endPoint() const
@@ -99,12 +120,24 @@ GeLineSeg3d& GeLineSeg3d::operator =(const GeLineSeg3d& line)
 	return *this;
 }
 
+void GeLineSeg3d::getInterval(GeInterval& range) const
+{
+	range.set(0.0, 1.0);
+}
+
+void GeLineSeg3d::getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const
+{
+	range.set(0.0, 1.0);
+	startPoint = this->startPoint();
+	endPoint = this->endPoint();
+}
+
 
 bool GeLineSeg3d::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
-		return true;
-	}
-	return false;
+	return entType == Ge::EntityId::kEntity3d
+		|| entType == Ge::EntityId::kCurve3d
+		|| entType == Ge::EntityId::kLinearEnt3d
+		|| entType == this->type();
 }
 Ge::EntityId GeLineSeg3d::type() const {
 	return Ge::EntityId::kLineSeg3d;
@@ -124,16 +157,13 @@ bool GeLineSeg3d::isEqualTo(const GeLineSeg3d& entity) const {
 	return this->isEqualTo(entity, GeContext::gTol);
 }
 bool GeLineSeg3d::isEqualTo(const GeLineSeg3d& entity, const GeTol& tol) const {
-	if (this->pointOnLine().isEqualTo(entity.pointOnLine(), tol) == false) {
-		return false;
+	if (this->startPoint().isEqualTo(entity.startPoint(), tol) && this->endPoint().isEqualTo(entity.endPoint(), tol)) {
+		return true;
 	}
-	if (this->direction().isEqualTo(entity.direction(), tol) == false) {
-		return false;
+	if (this->startPoint().isEqualTo(entity.endPoint(), tol) && this->endPoint().isEqualTo(entity.startPoint(), tol)) {
+		return true;
 	}
-	if (abs(this->length() - entity.length()) > tol.equalPoint()) {
-		return false;
-	}
-	return true;
+	return false;
 }
 GeLineSeg3d& GeLineSeg3d::transformBy(const GeMatrix3d& xfm) {
 	GePoint3d p1 = this->pointOnLine();
@@ -185,15 +215,23 @@ bool GeLineSeg3d::isOn(const GePoint3d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GeLineSeg3d::isOn(const GePoint3d& pnt, const GeTol& tol) const {
-
 	GePoint3d start = this->startPoint();
-	GePoint3d end = this->endPoint();
+	GeVector3d segment = this->endPoint() - start;
+	GePoint3d projected = GeLinearEnt3d::vertical(pnt, *this, tol);
+	if (projected.distanceTo(pnt) > tol.equalPoint())
+	{
+		return false;
+	}
 
-	GeVector3d v1 = pnt - start;
-	GeVector3d v2 = end - pnt;
-	v1.normalize();
-	v2.normalize();
-	if (v1.isEqualTo(v2, tol) == false)
+	GeVector3d offset = pnt - start;
+	double projection = offset.dotProduct(segment);
+	if (projection < -tol.equalPoint())
+	{
+		return false;
+	}
+
+	double lengthSqrd = segment.lengthSqrd();
+	if (projection > lengthSqrd + tol.equalPoint())
 	{
 		return false;
 	}
@@ -303,24 +341,7 @@ GePoint3d GeLineSeg3d::closestPointTo(const GeLine3d& curve3d, GePoint3d& pntOnO
 		pointItselfs.append(this->endPoint());
 		pointOthers.append(curve3d.closestPointTo(this->endPoint(), tol));
 
-		double minDist = 0.0;
-		for (unsigned int i = 0; i < pointItselfs.length(); i++) {
-			for (int u = 0; u < pointOthers.length(); u++) {
-				double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-				if (i == 0 && u == 0) {
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y,pointItselfs[i].z);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y,pointOthers[u].z);
-					continue;
-				}
-				if (dist < minDist)
-				{
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y,pointItselfs[i].z);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y,pointOthers[u].z);
-				}
-			}
-		}
+		selectClosestPair(pointItselfs, pointOthers, closest, pntOnOtherCrv);
 
 	} while (false);
 
@@ -351,24 +372,7 @@ GePoint3d GeLineSeg3d::closestPointTo(const GeLineSeg3d& curve3d, GePoint3d& pnt
 		pointItselfs.append(this->endPoint());
 		pointOthers.append(curve3d.closestPointTo(this->endPoint(), tol));
 
-		double minDist = 0.0;
-		for (int i = 0; i < pointItselfs.length(); i++) {
-			for (int u = 0; u < pointOthers.length(); u++) {
-				double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-				if (i == 0 && u == 0) {
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y,pointItselfs[i].z);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y,pointOthers[u].z);
-					continue;
-				}
-				if (dist < minDist)
-				{
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y,pointItselfs[i].z);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y,pointOthers[u].z);
-				}
-			}
-		}
+		selectClosestPair(pointItselfs, pointOthers, closest, pntOnOtherCrv);
 
 	} while (false);
 
@@ -397,24 +401,7 @@ GePoint3d GeLineSeg3d::closestPointTo(const GeRay3d& curve3d, GePoint3d& pntOnOt
 		pointItselfs.append(this->endPoint());
 		pointOthers.append(curve3d.closestPointTo(this->endPoint(), tol));
 
-		double minDist = 0.0;
-		for (int i = 0; i < pointItselfs.length(); i++) {
-			for (int u = 0; u < pointOthers.length(); u++) {
-				double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-				if (i == 0 && u == 0) {
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y,pointItselfs[i].z);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y,pointOthers[u].z);
-					continue;
-				}
-				if (dist < minDist)
-				{
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y,pointItselfs[i].z);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y,pointOthers[u].z);
-				}
-			}
-		}
+		selectClosestPair(pointItselfs, pointOthers, closest, pntOnOtherCrv);
 
 	} while (false);
 
@@ -487,25 +474,37 @@ GePoint3d GeLineSeg3d::projClosestPointTo(const GePoint3d& pnt, const GeVector3d
 GePoint3d GeLineSeg3d::projClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, const GeTol& tol) const {
 	GeLine3d line(pnt, projectDirection);
 	GePoint3d pntOnOtherCrv;
-	return this->closestPointTo(line, pntOnOtherCrv);
+	return this->closestPointTo(line, pntOnOtherCrv, tol);
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const {
 	return this->projClosestPointTo(curve3d, projectDirection, pntOnOtherCrv, GeContext::gTol);
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const {
-	return GePoint3d::kOrigin;
+	GePoint3d pointOnThis;
+	if (this->projIntersectWith(curve3d, projectDirection, pointOnThis, pntOnOtherCrv, tol) == false) {
+		return GePoint3d::kOrigin;
+	}
+	return pointOnThis;
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const {
 	return this->projClosestPointTo(curve3d, projectDirection, pntOnOtherCrv, GeContext::gTol);
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const {
-	return GePoint3d::kOrigin;
+	GePoint3d pointOnThis;
+	if (this->projIntersectWith(curve3d, projectDirection, pointOnThis, pntOnOtherCrv, tol) == false) {
+		return GePoint3d::kOrigin;
+	}
+	return pointOnThis;
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const {
 	return this->projClosestPointTo(curve3d, projectDirection, pntOnOtherCrv, GeContext::gTol);
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const {
-	return GePoint3d::kOrigin;
+	GePoint3d pointOnThis;
+	if (this->projIntersectWith(curve3d, projectDirection, pointOnThis, pntOnOtherCrv, tol) == false) {
+		return GePoint3d::kOrigin;
+	}
+	return pointOnThis;
 }
 GePoint3d GeLineSeg3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const {
 	return this->projClosestPointTo(curve3d, projectDirection, pntOnOtherCrv, GeContext::gTol);
@@ -517,25 +516,42 @@ void GeLineSeg3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& 
 	return this->getProjClosestPointTo(pnt, projectDirection, pntOnCrv, GeContext::gTol);
 }
 void GeLineSeg3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnCrv, const GeTol& tol) const {
-
+	GePoint3d point = this->projClosestPointTo(pnt, projectDirection, tol);
+	pntOnCrv.setCurve(*this);
+	pntOnCrv.setParameter(this->paramOf(point, tol));
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {
 	return this->getProjClosestPointTo(curve3d, projectDirection, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const {
-
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {
 	return this->getProjClosestPointTo(curve3d, projectDirection, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const {
-
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {
 	return this->getProjClosestPointTo(curve3d, projectDirection, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const {
-
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeLineSeg3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {
 	return this->getProjClosestPointTo(curve3d, projectDirection, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);
@@ -549,6 +565,9 @@ bool GeLineSeg3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCr
 bool GeLineSeg3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCrv, const GeTol& tol) const {
 
 	GePoint3d vertical = GeLineSeg3d::vertical(pnt, *this);
+	if (this->isOn(vertical, tol) == false) {
+		return false;
+	}
 	pntOnCrv.setCurve(*this);
 	pntOnCrv.setParameter(this->paramOf(vertical, tol));
 	return true;
@@ -596,27 +615,18 @@ double GeLineSeg3d::paramOf(const GePoint3d& pnt) const {
 	return this->paramOf(pnt, GeContext::gTol);
 }
 double GeLineSeg3d::paramOf(const GePoint3d& pnt, const GeTol& tol) const {
+	if (this->isOn(pnt, tol) == false) {
+		return 0.0;
+	}
 
-	double param = 0.0;
+	GeVector3d axis = GE_IMP_LINESEG3D(this->m_pImpl)->vector;
+	double lengthSqrd = axis.lengthSqrd();
+	if (lengthSqrd <= tol.equalPoint() * tol.equalPoint()) {
+		return 0.0;
+	}
 
-	do
-	{
-		GeLine3d line(this->pointOnLine(), this->direction());
-		if (line.isOn(pnt, tol) == false) {
-			break;
-		}
-
-		GeVector3d direction = pnt - this->pointOnLine();
-		direction.normalize();
-		if (direction.isEqualTo(this->direction(), tol) == true) {
-			param = (pnt.distanceTo(this->pointOnLine())) / this->length();
-		}
-		else {
-			param = 0 - (pnt.distanceTo(this->pointOnLine())) / this->length();
-		}
-	} while (false);
-
-	return param;
+	GeVector3d offset = pnt - this->startPoint();
+	return offset.dotProduct(axis) / lengthSqrd;
 }
 void GeLineSeg3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, GeVoidPointerArray& offsetCurveList) const {
 	return this->getTrimmedOffset(distance, planeNormal, offsetCurveList, Ge::OffsetCrvExtType::kExtend);
@@ -657,13 +667,40 @@ bool GeLineSeg3d::isPlanar(GePlane& plane) const {
 	return this->isPlanar(plane, GeContext::gTol);
 }
 bool GeLineSeg3d::isPlanar(GePlane& plane, const GeTol& tol) const {
-	return false;
+	GeVector3d direction = this->direction();
+	if (direction.length() <= tol.equalVector())
+	{
+		plane.set(this->startPoint(), GeVector3d::kZAxis);
+		return true;
+	}
+
+	GeVector3d refAxis = GeVector3d::kZAxis;
+	if (direction.isParallelTo(refAxis, tol) == true)
+	{
+		refAxis = GeVector3d::kXAxis;
+	}
+
+	GeVector3d normal = direction.crossProduct(refAxis);
+	if (normal.length() <= tol.equalVector())
+	{
+		refAxis = GeVector3d::kYAxis;
+		normal = direction.crossProduct(refAxis);
+	}
+	if (normal.length() <= tol.equalVector())
+	{
+		plane.set(this->startPoint(), GeVector3d::kZAxis);
+		return true;
+	}
+
+	plane.set(this->startPoint(), normal.normal());
+	return true;
 }
 bool GeLineSeg3d::isLinear(GeLine3d& line) const {
 	return this->isLinear(line, GeContext::gTol);
 }
 bool GeLineSeg3d::isLinear(GeLine3d& line, const GeTol& tol) const {
-	return false;
+	line.set(this->pointOnLine(), this->direction());
+	return true;
 }
 bool GeLineSeg3d::isCoplanarWith(const GeLine3d& curve3d, GePlane& plane) const {
 	return this->isCoplanarWith(curve3d, plane, GeContext::gTol);
@@ -700,7 +737,9 @@ bool GeLineSeg3d::isCoplanarWith(const GeCircArc3d& curve3d, GePlane& plane, con
 	line1.set(this->pointOnLine(), this->direction());
 	return line1.isCoplanarWith(curve3d, plane, tol);
 }
-void GeLineSeg3d::getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* piece2) const {
+void GeLineSeg3d::getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const {
+	piece1 = NULL;
+	piece2 = NULL;
 	GePointOnCurve3d pointOnCurve(*this, param);
 	GePoint3d point = pointOnCurve.point();
 	if (this->isOn(point) == false) {
@@ -710,11 +749,14 @@ void GeLineSeg3d::getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* pie
 	piece2 = new GeLineSeg3d(point, this->endPoint());
 }
 bool GeLineSeg3d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const {
-	return false;
+	GeLineSeg3d* line = new GeLineSeg3d(*this);
+	explodedCurves.append(line);
+	newExplodedCurve.append(1);
+	return true;
 }
 GeBoundBlock3d GeLineSeg3d::boundBlock() const {
 	GeInterval range;
-	range.set(this->paramOf(this->pointOnLine()), this->paramOf(this->pointOnLine() + this->direction() * this->length()));
+	this->getInterval(range);
 	return this->boundBlock(range);
 }
 GeBoundBlock3d GeLineSeg3d::boundBlock(const GeInterval& range) const {
@@ -733,7 +775,7 @@ GeBoundBlock3d GeLineSeg3d::boundBlock(const GeInterval& range) const {
 }
 GeBoundBlock3d GeLineSeg3d::orthoBoundBlock() const {
 	GeInterval range;
-	range.set(this->paramOf(this->pointOnLine()), this->paramOf(this->pointOnLine() + this->direction() * this->length()));
+	this->getInterval(range);
 	return this->orthoBoundBlock(range);
 }
 GeBoundBlock3d GeLineSeg3d::orthoBoundBlock(const GeInterval& range) const {
@@ -764,6 +806,12 @@ GeBoundBlock3d GeLineSeg3d::orthoBoundBlock(const GeInterval& range) const {
 		if (points[i].y > maxPoint.y) {
 			maxPoint.y = points[i].y;
 		}
+		if (points[i].z < minPoint.z) {
+			minPoint.z = points[i].z;
+		}
+		if (points[i].z > maxPoint.z) {
+			maxPoint.z = points[i].z;
+		}
 	}
 
 	boundBlock.set(minPoint, maxPoint);
@@ -771,18 +819,16 @@ GeBoundBlock3d GeLineSeg3d::orthoBoundBlock(const GeInterval& range) const {
 	return boundBlock;
 }
 bool GeLineSeg3d::hasStartPoint(GePoint3d& startPoint) const {
-	GePointOnCurve3d pointOnCurve;
-	pointOnCurve.setCurve(*this);
-	pointOnCurve.setParameter(0.0);
-	startPoint = pointOnCurve.point();
-	return true;
+	GeInterval range;
+	GePoint3d endPoint;
+	this->getInterval(range, startPoint, endPoint);
+	return range.isBoundedBelow();
 }
 bool GeLineSeg3d::hasEndPoint(GePoint3d& endPoint) const {
-	GePointOnCurve3d pointOnCurve;
-	pointOnCurve.setCurve(*this);
-	pointOnCurve.setParameter(1.0);
-	endPoint = pointOnCurve.point();
-	return true;
+	GeInterval range;
+	GePoint3d startPoint;
+	this->getInterval(range, startPoint, endPoint);
+	return range.isBoundedAbove();
 }
 GePoint3d GeLineSeg3d::evalPoint(double param) const {
 	GePointOnCurve3d pointOnCurve;
@@ -791,7 +837,7 @@ GePoint3d GeLineSeg3d::evalPoint(double param) const {
 	return pointOnCurve.point();
 }
 void GeLineSeg3d::getSamplePoints(double fromParam, double toParam, double approxEps, GePoint3dArray& pointArray, GeDoubleArray& paramArray) const {
-	return this->getSamplePoints(fromParam, toParam, approxEps, pointArray, paramArray);
+	return this->getSamplePoints(fromParam, toParam, approxEps, pointArray, paramArray, false);
 }
 void GeLineSeg3d::getSamplePoints(double fromParam, double toParam, double approxEps, GePoint3dArray& pointArray, GeDoubleArray& paramArray, bool forceResampling) const {
 
@@ -809,7 +855,8 @@ void GeLineSeg3d::getSamplePoints(double fromParam, double toParam, double appro
 	}
 }
 void GeLineSeg3d::getSamplePoints(int numSample, GePoint3dArray& pointArray) const {
-	return this->getSamplePoints(numSample, pointArray);
+	GeDoubleArray paramArray;
+	return this->getSamplePoints(numSample, pointArray, paramArray);
 }
 void GeLineSeg3d::getSamplePoints(int numSample, GePoint3dArray& pointArray, GeDoubleArray& paramArray) const {
 	for (int i = 0; i < numSample; i++) {

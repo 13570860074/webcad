@@ -18,9 +18,9 @@ public:
 
     // The x-axis and y-axis and z-axis lines.
     //
-    static const GeLine3d kXAxis;
-    static const GeLine3d kYAxis;
-    static const GeLine3d kZAxis;
+    GE_STATIC_EXPORT static const GeLine3d kXAxis;
+    GE_STATIC_EXPORT static const GeLine3d kYAxis;
+    GE_STATIC_EXPORT static const GeLine3d kZAxis;
 
     // Set methods.
     //
@@ -30,6 +30,11 @@ public:
     // Assignment operator.
     //
     GeLine3d& operator = (const GeLine3d& line);
+
+    // Interval.
+    //
+    void getInterval(GeInterval& range) const override;
+    void getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const override;
 };
 
 

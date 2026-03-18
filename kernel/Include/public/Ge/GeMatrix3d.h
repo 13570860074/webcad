@@ -54,7 +54,7 @@ public:
     GeMatrix3d(const GeMatrix3d& src);
     GeMatrix3d& operator =(const GeMatrix3d& src);
 
-    static const GeMatrix3d kIdentity; // Multiplicative identity matrix.
+    GE_STATIC_EXPORT static const GeMatrix3d kIdentity; // Multiplicative identity matrix.
 
     void set(const GeMatrix3d& mat);
     double get(int row, int col) const;

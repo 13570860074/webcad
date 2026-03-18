@@ -12,9 +12,9 @@ class GePlane : public GePlanarEnt
 public:
     // Global plane objects.
     //
-    static const GePlane kXYPlane;
-    static const GePlane kYZPlane;
-    static const GePlane kZXPlane;
+    GE_STATIC_EXPORT static const GePlane kXYPlane;
+    GE_STATIC_EXPORT static const GePlane kYZPlane;
+    GE_STATIC_EXPORT static const GePlane kZXPlane;
 
     GePlane();
     GePlane(const GePlane& src);
@@ -29,6 +29,8 @@ public:
     // Signed distance from a point to a plane.
     //
     double signedDistanceTo(const GePoint3d& pnt) const;
+    bool isLeftHanded() const;
+    void getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const;
 
     // Intersection
     //

@@ -12,6 +12,18 @@ class GeCircArc3d;
 class GePlanarEnt : public GeSurface
 {
 public:
+    GePoint2d paramOf(const GePoint3d& pnt) const;
+    GePoint2d paramOf(const GePoint3d& pnt, const GeTol& tol) const;
+    GePoint3d closestPointTo(const GePoint3d& pnt) const;
+    GePoint3d closestPointTo(const GePoint3d& pnt, const GeTol& tol) const;
+    double distanceTo(const GePoint3d& pnt) const;
+    double distanceTo(const GePoint3d& pnt, const GeTol& tol) const;
+    bool isNormalReversed() const;
+    bool isLeftHanded() const;
+    GeSurface& reverseNormal();
+    void getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const;
+    GePoint3d evalPoint(const GePoint2d& param) const;
+
     // Intersection
     //
     bool intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& pnt) const;

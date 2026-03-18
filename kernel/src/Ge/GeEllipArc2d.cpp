@@ -267,7 +267,7 @@ GeEllipArc2d& GeEllipArc2d::operator = (const GeEllipArc2d& arc) {
 
 
 bool GeEllipArc2d::isKindOf(Ge::EntityId entType) const {
-    if (entType == this->type()) {
+    if (entType == Ge::kEntity2d || entType == Ge::kCurve2d || entType == this->type()) {
         return true;
     }
     return false;
@@ -277,11 +277,11 @@ Ge::EntityId GeEllipArc2d::type() const {
 }
 GeEllipArc2d* GeEllipArc2d::copy() const {
     GeEllipArc2d* arc = new GeEllipArc2d();
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->center = GE_IMP_ELLIPARC2D(arc->m_pImpl)->center;
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->majorAxis = GE_IMP_ELLIPARC2D(arc->m_pImpl)->majorAxis;
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->ratio = GE_IMP_ELLIPARC2D(arc->m_pImpl)->ratio;
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->startAngle = GE_IMP_ELLIPARC2D(arc->m_pImpl)->startAngle;
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->endAngle = GE_IMP_ELLIPARC2D(arc->m_pImpl)->endAngle;
+    GE_IMP_ELLIPARC2D(arc->m_pImpl)->center = GE_IMP_ELLIPARC2D(this->m_pImpl)->center;
+    GE_IMP_ELLIPARC2D(arc->m_pImpl)->majorAxis = GE_IMP_ELLIPARC2D(this->m_pImpl)->majorAxis;
+    GE_IMP_ELLIPARC2D(arc->m_pImpl)->ratio = GE_IMP_ELLIPARC2D(this->m_pImpl)->ratio;
+    GE_IMP_ELLIPARC2D(arc->m_pImpl)->startAngle = GE_IMP_ELLIPARC2D(this->m_pImpl)->startAngle;
+    GE_IMP_ELLIPARC2D(arc->m_pImpl)->endAngle = GE_IMP_ELLIPARC2D(this->m_pImpl)->endAngle;
     return arc;
 }
 bool GeEllipArc2d::operator == (const GeEllipArc2d& entity) const {
@@ -320,15 +320,22 @@ GeEllipArc2d& GeEllipArc2d::transformBy(const GeMatrix2d& xfm) {
     GeVector2d majorAxis = this->majorAxis();
     GeVector2d minorAxis = this->minorAxis();
     GePoint2d startPoint = this->startPoint();
-    GePoint2d endPoint = this->startPoint();
+    GePoint2d endPoint = this->endPoint();
     center.transformBy(xfm);
     majorAxis.transformBy(xfm);
     minorAxis.transformBy(xfm);
     startPoint.transformBy(xfm);
     endPoint.transformBy(xfm);
 
-    double startAng = GeVector2d::kXAxis.angleToCCW(majorAxis);
-    double endAng = GeVector2d::kXAxis.angleToCCW(majorAxis);
+    GeVector2d majorDir = majorAxis;
+    GeVector2d minorDir = minorAxis;
+    majorDir.normalize();
+    minorDir.normalize();
+
+    GeVector2d startVec = startPoint - center;
+    GeVector2d endVec = endPoint - center;
+    double startAng = atan2(startVec.dotProduct(minorDir), startVec.dotProduct(majorDir));
+    double endAng = atan2(endVec.dotProduct(minorDir), endVec.dotProduct(majorDir));
     this->set(center, majorAxis, minorAxis, majorAxis.length(), minorAxis.length(), startAng, endAng);
     return *this;
 }
@@ -395,7 +402,9 @@ bool GeEllipArc2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
 
 
 
-void GeEllipArc2d::getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* piece2) const {
+void GeEllipArc2d::getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const {
+	piece1 = NULL;
+	piece2 = NULL;
 
     GePointOnCurve2d pointOnCurve(*this, param);
     GePoint2d point = pointOnCurve.point();
@@ -403,14 +412,16 @@ void GeEllipArc2d::getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* pi
         return;
     }
 
-    GeVector2d vector = point - this->center();
-    double angle = this->majorAxis().angleToCCW(vector);
+    double angle = this->paramOf(point);
 
     piece1 = new GeEllipArc2d(this->center(), this->majorAxis(), this->minorAxis(),this->majorRadius(),this->minorRadius(), this->startAng(), angle);
     piece2 = new GeEllipArc2d(this->center(), this->majorAxis(), this->minorAxis(), this->majorRadius(), this->minorRadius(), angle, this->endAng());
 }
 bool GeEllipArc2d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const {
-    return false;
+    GeEllipArc2d* arc = new GeEllipArc2d(*this);
+    explodedCurves.append(arc);
+    newExplodedCurve.append(1);
+    return true;
 }
 GeBoundBlock2d GeEllipArc2d::boundBlock() const {
     GeInterval range;
@@ -522,7 +533,12 @@ double GeEllipArc2d::length(double fromParam, double toParam)const {
     return this->length(fromParam, toParam, GeContext::gTol.equalPoint());
 }
 double GeEllipArc2d::length(double fromParam, double toParam, double tol)const {
-    return (toParam - fromParam) * this->length();
+    GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), fromParam, toParam, 256);
+    double len = 0.0;
+    for (int i = 1; i < points.length(); i++) {
+        len += points[i - 1].distanceTo(points[i]);
+    }
+    return len;
 }
 double GeEllipArc2d::area() const {
     return this->area(GeContext::gTol);
@@ -537,11 +553,37 @@ double GeEllipArc2d::paramAtLength(double datumParam, double length) const {
     return this->paramAtLength(datumParam, length, GeContext::gTol.equalPoint()); 
 }
 double GeEllipArc2d::paramAtLength(double datumParam, double length, double tol) const {
-    double param = 0.0;
+    double total = 0.0;
+    double currentParam = datumParam;
+    GePoint2d prevPoint = this->evalPoint(currentParam);
 
+    for (int i = 1; i <= 256; i++) {
+        double nextParam = datumParam + (PI * 2.0) / 256.0 * i;
+        GePoint2d nextPoint = this->evalPoint(nextParam);
+        double segLen = prevPoint.distanceTo(nextPoint);
 
+        if (total + segLen >= length) {
+            while (nextParam >= PI * 2.0) {
+                nextParam -= PI * 2.0;
+            }
+            while (nextParam < 0.0) {
+                nextParam += PI * 2.0;
+            }
+            return nextParam;
+        }
 
-    return param;
+        total += segLen;
+        prevPoint = nextPoint;
+        currentParam = nextParam;
+    }
+
+    while (currentParam >= PI * 2.0) {
+        currentParam -= PI * 2.0;
+    }
+    while (currentParam < 0.0) {
+        currentParam += PI * 2.0;
+    }
+    return currentParam;
 }
 double GeEllipArc2d::distanceTo(const GePoint2d& point) const
 {
@@ -849,16 +891,25 @@ double GeEllipArc2d::paramOf(const GePoint2d& pnt) const {
 }
 double GeEllipArc2d::paramOf(const GePoint2d& pnt, const GeTol& tol) const {
 
-    if (this->isOn(pnt) == false) {
+    if (this->isOn(pnt, tol) == false) {
         return 0.0;
     }
 
+    double majorRadius = this->majorRadius();
+    double minorRadius = this->minorRadius();
+    if (majorRadius < tol.equalPoint() || minorRadius < tol.equalPoint()) {
+        return 0.0;
+    }
 
-    GeMatrix2d mat;
-    mat.setToScaling(GeScale2d(1, this->majorRadius() / this->minorRadius()), this->center());
+    GeVector2d majorDir = this->majorAxis();
+    GeVector2d minorDir = this->minorAxis();
+    majorDir.normalize();
+    minorDir.normalize();
 
-
-    return 0.0;
+    GeVector2d vec = pnt - this->center();
+    double x = vec.dotProduct(majorDir) / majorRadius;
+    double y = vec.dotProduct(minorDir) / minorRadius;
+    return atan2(y, x);
 }
 void GeEllipArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCurveList) const {
     return this->getTrimmedOffset(distance, offsetCurveList, Ge::OffsetCrvExtType::kExtend);
@@ -878,7 +929,7 @@ void GeEllipArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetC
 
     GeEllipArc2d* circArc = new GeEllipArc2d();
     GE_IMP_ELLIPARC2D(circArc->m_pImpl)->center = this->center();
-    GE_IMP_ELLIPARC2D(circArc->m_pImpl)->majorAxis = GE_IMP_ELLIPARC2D(circArc->m_pImpl)->majorAxis.normal() * (majorRadius + distance);
+	GE_IMP_ELLIPARC2D(circArc->m_pImpl)->majorAxis = this->majorAxis().normal() * (majorRadius + distance);
     GE_IMP_ELLIPARC2D(circArc->m_pImpl)->ratio = (minorRadius + distance) / GE_IMP_ELLIPARC2D(circArc->m_pImpl)->majorAxis.length();
     GE_IMP_ELLIPARC2D(circArc->m_pImpl)->startAngle = GE_IMP_ELLIPARC2D(this->m_pImpl)->startAngle;
     GE_IMP_ELLIPARC2D(circArc->m_pImpl)->endAngle = GE_IMP_ELLIPARC2D(this->m_pImpl)->endAngle;

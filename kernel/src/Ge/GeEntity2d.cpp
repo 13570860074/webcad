@@ -20,6 +20,7 @@ GeEntity2d::GeEntity2d(const GeEntity2d& entity)
 GeEntity2d::GeEntity2d(GeImpEntity2d *pImpl)
 {
     this->m_pImpl = NULL;
+    this->connectTo(pImpl);
 }
 GeEntity2d::~GeEntity2d() {
     if (this->m_pImpl != NULL) {
@@ -32,7 +33,7 @@ Ge::EntityId GeEntity2d::type()const
     return Ge::EntityId::kEntity2d;
 }
 bool GeEntity2d::isKindOf(Ge::EntityId entType) const {
-    return false;
+    return entType == Ge::EntityId::kEntity2d || entType == this->type();
 }
 
 GeEntity2d* GeEntity2d::copy()const {
@@ -43,16 +44,16 @@ GeEntity2d& GeEntity2d::operator =(const GeEntity2d& entity) {
     return *this;
 }
 bool GeEntity2d::operator ==(const GeEntity2d& entity) const {
-    return false;
+    return this == &entity;
 }
 bool GeEntity2d::operator !=(const GeEntity2d& entity) const {
-    return false;
+    return !(*this == entity);
 }
 bool GeEntity2d::isEqualTo(const GeEntity2d& entity) const {
     return this->isEqualTo(entity, GeContext::gTol);
 }
 bool GeEntity2d::isEqualTo(const GeEntity2d& other, const GeTol& tol) const {
-    return false;
+    return this == &other;
 }
 GeEntity2d& GeEntity2d::transformBy(const GeMatrix2d& xfm) {
     return *this;
@@ -80,4 +81,13 @@ bool GeEntity2d::isOn(const GePoint2d& pnt) const {
 }
 bool GeEntity2d::isOn(const GePoint2d& point, const GeTol& tol) const {
     return false;
+}
+void GeEntity2d::connectTo(GeImpEntity2d* pImpl) {
+    if (this->m_pImpl == pImpl) {
+        return;
+    }
+    if (this->m_pImpl != NULL) {
+        delete this->m_pImpl;
+    }
+    this->m_pImpl = pImpl;
 }

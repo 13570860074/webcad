@@ -39,7 +39,9 @@ public:
     virtual double distanceTo(const GePoint3d& pnt, const GeTol& tol) const;
 
     virtual bool isNormalReversed() const;
+    virtual bool isLeftHanded() const;
     virtual GeSurface& reverseNormal();
+    virtual void getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const;
 
     // Assignment operator.
     //

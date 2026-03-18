@@ -55,10 +55,10 @@ public:
     GeVector3d(double xx, double yy, double zz) : x(xx), y(yy), z(zz) {};
     GeVector3d(const GePlanarEnt& plane, const GeVector2d& vector2d);
 
-    static const GeVector3d kIdentity; // Additive identity vector.
-    static const GeVector3d kXAxis; // X-Axis vector.
-    static const GeVector3d kYAxis; // Y-Axis vector.
-    static const GeVector3d kZAxis; // Z-Axis vector.
+    GE_STATIC_EXPORT static const GeVector3d kIdentity; // Additive identity vector.
+    GE_STATIC_EXPORT static const GeVector3d kXAxis; // X-Axis vector.
+    GE_STATIC_EXPORT static const GeVector3d kYAxis; // Y-Axis vector.
+    GE_STATIC_EXPORT static const GeVector3d kZAxis; // Z-Axis vector.
 
 
     friend GeVector3d operator * (const GeMatrix3d& xfm, const GeVector3d& vect);

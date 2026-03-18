@@ -38,6 +38,9 @@ public:
     GESURFACE_METHODS(GeBoundedPlane);
     GEPLANARENT_METHODS(GeBoundedPlane);
 
+    bool isLeftHanded() const;
+    void getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const;
+
     // Intersection.
     //
     bool intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& point) const;

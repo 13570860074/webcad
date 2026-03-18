@@ -473,7 +473,7 @@ Adesk::Boolean GeCircArc3d::tangent(const GePoint3d& pnt, GeLine3d& line, const 
 	return isValue;
 }
 void GeCircArc3d::getPlane(GePlane& plane) const {
-
+	plane.set(this->center(), this->normal());
 }
 
 Adesk::Boolean GeCircArc3d::isInside(const GePoint3d& pnt) const
@@ -492,7 +492,7 @@ Adesk::Boolean GeCircArc3d::isInside(const GePoint3d& pnt, const GeTol& tol) con
 
 	// 判断点是否在圆内
 	double dist = this->center().distanceTo(pnt);
-	if (dist > this->radius() + this->radius())
+	if (dist > this->radius() + tol.equalPoint())
 	{
 		return false;
 	}
@@ -574,8 +574,8 @@ GeCircArc3d& GeCircArc3d::set(const GePoint3d& cent, const GeVector3d& nrm, doub
 GeCircArc3d& GeCircArc3d::set(const GePoint3d& cent, const GeVector3d& nrm, const GeVector3d& refVec, double radius, double startAngle, double endAngle) {
 	GE_IMP_CIRCARC3D(this->m_pImpl)->center = cent;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = radius;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = 0;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = PI * 2;
+	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = startAngle;
+	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = endAngle;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.set(refVec.x, refVec.y, refVec.z);
 	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.normalize();
 	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = nrm;
@@ -665,7 +665,7 @@ GeCircArc3d& GeCircArc3d::operator=(const GeCircArc3d& arc)
 
 bool GeCircArc3d::isKindOf(Ge::EntityId entType) const
 {
-	if (entType == this->type())
+	if (entType == Ge::kEntity3d || entType == Ge::kCurve3d || entType == this->type())
 	{
 		return true;
 	}
@@ -769,9 +769,9 @@ GeCircArc3d& GeCircArc3d::rotateBy(double angle, const GeVector3d& vec)
 }
 GeCircArc3d& GeCircArc3d::rotateBy(double angle, const GeVector3d& vec, const GePoint3d& wrtPoint)
 {
-	GePoint3d center = this->center();
-	center.rotateBy(angle, vec, wrtPoint);
-	this->setAngles(this->startAng() + angle, this->endAng() + angle);
+	GeMatrix3d mat;
+	mat.setToRotation(angle, vec, wrtPoint);
+	this->transformBy(mat);
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::mirror(const GePlane& plane)
@@ -845,8 +845,10 @@ bool GeCircArc3d::isOn(const GePoint3d& pnt, const GeTol& tol) const
 
 	return isValue;
 }
-void GeCircArc3d::getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* piece2) const
+void GeCircArc3d::getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const
 {
+	piece1 = NULL;
+	piece2 = NULL;
 
 	GePointOnCurve3d pointOnCurve(*this, param);
 	GePoint3d point = pointOnCurve.point();
@@ -863,7 +865,10 @@ void GeCircArc3d::getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* pie
 }
 bool GeCircArc3d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const
 {
-	return false;
+	GeCircArc3d* arc = new GeCircArc3d(*this);
+	explodedCurves.append(arc);
+	newExplodedCurve.append(1);
+	return true;
 }
 GeBoundBlock3d GeCircArc3d::boundBlock() const
 {
@@ -1045,7 +1050,7 @@ double GeCircArc3d::paramAtLength(double datumParam, double length, double tol) 
 
 	param = datumParam + (length / (2 * PI * this->radius()) * (2 * PI));
 	if (param > PI * 2) {
-		param = param - int(param / PI * 2) * PI * 2;
+		param = param - int(param / (PI * 2)) * PI * 2;
 	}
 	return param;
 }
@@ -1416,7 +1421,31 @@ GePoint3d GeCircArc3d::projClosestPointTo(const GePoint3d& pnt, const GeVector3d
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(pnt, tol);
+	}
+
+	GeLine3d line(pnt, projectDirection);
+	GePoint3dArray points = this->intersectWith(line, tol);
+	if (points.length() == 0)
+	{
+		return this->closestPointTo(pnt, tol);
+	}
+
+	GePoint3d closest = points[0];
+	double minDist = closest.distanceTo(pnt);
+	for (int i = 1; i < points.length(); i++)
+	{
+		double dist = points[i].distanceTo(pnt);
+		if (dist < minDist)
+		{
+			minDist = dist;
+			closest = points[i];
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -1424,7 +1453,39 @@ GePoint3d GeCircArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVecto
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
+	}
+
+	GePoint3d closest;
+	double startParam = this->startAng();
+	double endParam = this->endAng();
+	if (this->isClosed(tol) == true)
+	{
+		endParam = startParam + PI * 2.0;
+	}
+	else if (endParam < startParam)
+	{
+		endParam += PI * 2.0;
+	}
+
+	double minDist = 0.0;
+	for (int i = 0; i <= 256; i++)
+	{
+		double param = startParam + (endParam - startParam) * i / 256.0;
+		GePoint3d point = this->evalPoint(param);
+		GePoint3d other = curve3d.projClosestPointTo(point, -projectDirection, tol);
+		double dist = point.distanceTo(other);
+		if (i == 0 || dist < minDist)
+		{
+			minDist = dist;
+			closest = point;
+			pntOnOtherCrv = other;
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -1432,7 +1493,39 @@ GePoint3d GeCircArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVe
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
+	}
+
+	GePoint3d closest;
+	double startParam = this->startAng();
+	double endParam = this->endAng();
+	if (this->isClosed(tol) == true)
+	{
+		endParam = startParam + PI * 2.0;
+	}
+	else if (endParam < startParam)
+	{
+		endParam += PI * 2.0;
+	}
+
+	double minDist = 0.0;
+	for (int i = 0; i <= 256; i++)
+	{
+		double param = startParam + (endParam - startParam) * i / 256.0;
+		GePoint3d point = this->evalPoint(param);
+		GePoint3d other = curve3d.projClosestPointTo(point, -projectDirection, tol);
+		double dist = point.distanceTo(other);
+		if (i == 0 || dist < minDist)
+		{
+			minDist = dist;
+			closest = point;
+			pntOnOtherCrv = other;
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -1440,7 +1533,39 @@ GePoint3d GeCircArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
+	}
+
+	GePoint3d closest;
+	double startParam = this->startAng();
+	double endParam = this->endAng();
+	if (this->isClosed(tol) == true)
+	{
+		endParam = startParam + PI * 2.0;
+	}
+	else if (endParam < startParam)
+	{
+		endParam += PI * 2.0;
+	}
+
+	double minDist = 0.0;
+	for (int i = 0; i <= 256; i++)
+	{
+		double param = startParam + (endParam - startParam) * i / 256.0;
+		GePoint3d point = this->evalPoint(param);
+		GePoint3d other = curve3d.projClosestPointTo(point, -projectDirection, tol);
+		double dist = point.distanceTo(other);
+		if (i == 0 || dist < minDist)
+		{
+			minDist = dist;
+			closest = point;
+			pntOnOtherCrv = other;
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -1448,7 +1573,7 @@ GePoint3d GeCircArc3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeVe
 }
 GePoint3d GeCircArc3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
 }
 void GeCircArc3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnCrv) const
 {
@@ -1456,6 +1581,9 @@ void GeCircArc3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& 
 }
 void GeCircArc3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnCrv, const GeTol& tol) const
 {
+	GePoint3d point = this->projClosestPointTo(pnt, projectDirection, tol);
+	pntOnCrv.setCurve(*this);
+	pntOnCrv.setParameter(this->paramOf(point, tol));
 }
 void GeCircArc3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -1463,6 +1591,12 @@ void GeCircArc3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3
 }
 void GeCircArc3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeCircArc3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -1470,6 +1604,12 @@ void GeCircArc3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVect
 }
 void GeCircArc3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeCircArc3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -1477,6 +1617,12 @@ void GeCircArc3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d
 }
 void GeCircArc3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeCircArc3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -1484,6 +1630,12 @@ void GeCircArc3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVect
 }
 void GeCircArc3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 bool GeCircArc3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCrv) const
 {
@@ -1491,7 +1643,15 @@ bool GeCircArc3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCr
 }
 bool GeCircArc3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCrv, const GeTol& tol) const
 {
-	return false;
+	GePoint3d closest = this->closestPointTo(pnt, tol);
+	double param = 0.0;
+	if (this->isOn(closest, param, tol) == false)
+	{
+		return false;
+	}
+	pntOnCrv.setCurve(*this);
+	pntOnCrv.setParameter(param);
+	return true;
 }
 GeCircArc3d* GeCircArc3d::project(const GePlane& projectionPlane, const GeVector3d& projectDirection) const
 {
@@ -1499,7 +1659,23 @@ GeCircArc3d* GeCircArc3d::project(const GePlane& projectionPlane, const GeVector
 }
 GeCircArc3d* GeCircArc3d::project(const GePlane& projectionPlane, const GeVector3d& projectDirection, const GeTol& tol) const
 {
-	return NULL;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return NULL;
+	}
+	if (projectionPlane.normal().isParallelTo(this->normal(), tol.equalVector()) == false)
+	{
+		return NULL;
+	}
+	if (projectDirection.isPerpendicularTo(this->normal(), tol.equalVector()) == true)
+	{
+		return NULL;
+	}
+
+	GePoint3d center = this->center().project(projectionPlane, projectDirection);
+	GeCircArc3d* arc = new GeCircArc3d();
+	arc->set(center, this->normal(), this->refVec(), this->radius(), this->startAng(), this->endAng());
+	return arc;
 }
 GeCircArc3d* GeCircArc3d::orthoProject(const GePlane& projectionPlane) const
 {
@@ -1507,7 +1683,7 @@ GeCircArc3d* GeCircArc3d::orthoProject(const GePlane& projectionPlane) const
 }
 GeCircArc3d* GeCircArc3d::orthoProject(const GePlane& projectionPlane, const GeTol& tol) const
 {
-	return NULL;
+	return this->project(projectionPlane, projectionPlane.normal(), tol);
 }
 bool GeCircArc3d::isOn(const GePoint3d& pnt, double& param) const
 {
@@ -1516,13 +1692,29 @@ bool GeCircArc3d::isOn(const GePoint3d& pnt, double& param) const
 bool GeCircArc3d::isOn(const GePoint3d& pnt, double& param, const GeTol& tol) const
 {
 	GeVector3d v = pnt - this->center();
+	if (v.length() < tol.equalPoint())
+	{
+		return false;
+	}
+
+	GePlane plane(this->center(), this->normal());
+	if (plane.isOn(pnt, tol) == false)
+	{
+		return false;
+	}
+	if (fabs(v.length() - this->radius()) > tol.equalPoint())
+	{
+		return false;
+	}
+
 	v.normalize();
-	if (v.isParallelTo(this->normal(), tol.equalVector()) == false) {
+	if (v.isPerpendicularTo(this->normal(), tol.equalVector()) == false)
+	{
 		return false;
 	}
 
 	param = this->refVec().angleToCCW(v, this->normal());
-	return false;
+	return this->isOn(param, tol);
 }
 bool GeCircArc3d::isOn(double param) const
 {
@@ -1539,15 +1731,12 @@ double GeCircArc3d::paramOf(const GePoint3d& pnt) const
 }
 double GeCircArc3d::paramOf(const GePoint3d& pnt, const GeTol& tol) const
 {
-
-	GeCircArc3d c = *this;
-	if (c.isOn(pnt, tol) == false)
+	double param = 0.0;
+	if (this->isOn(pnt, param, tol) == false)
 	{
 		return 0;
 	}
-
-	GeVector3d vector = pnt - this->center();
-	return 0 - vector.angleToCCW(this->refVec());
+	return param;
 }
 void GeCircArc3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, GeVoidPointerArray& offsetCurveList) const
 {
@@ -1592,7 +1781,8 @@ bool GeCircArc3d::isPlanar(GePlane& plane) const
 }
 bool GeCircArc3d::isPlanar(GePlane& plane, const GeTol& tol) const
 {
-	return false;
+	this->getPlane(plane);
+	return true;
 }
 bool GeCircArc3d::isLinear(GeLine3d& line) const
 {
@@ -1608,9 +1798,16 @@ bool GeCircArc3d::isCoplanarWith(const GeLine3d& curve3d, GePlane& plane) const
 }
 bool GeCircArc3d::isCoplanarWith(const GeLine3d& curve3d, GePlane& plane, const GeTol& tol) const
 {
-	GeLine3d line1;
-	line1.set(curve3d.pointOnLine(), curve3d.direction());
-	return this->isCoplanarWith(line1, plane, tol);
+	this->getPlane(plane);
+	if (plane.isOn(curve3d.pointOnLine(), tol) == false)
+	{
+		return false;
+	}
+	if (curve3d.direction().isPerpendicularTo(plane.normal(), tol) == false)
+	{
+		return false;
+	}
+	return true;
 }
 bool GeCircArc3d::isCoplanarWith(const GeLineSeg3d& curve3d, GePlane& plane) const
 {
@@ -1618,9 +1815,16 @@ bool GeCircArc3d::isCoplanarWith(const GeLineSeg3d& curve3d, GePlane& plane) con
 }
 bool GeCircArc3d::isCoplanarWith(const GeLineSeg3d& curve3d, GePlane& plane, const GeTol& tol) const
 {
-	GeLine3d line1;
-	line1.set(curve3d.pointOnLine(), curve3d.direction());
-	return this->isCoplanarWith(line1, plane, tol);
+	this->getPlane(plane);
+	if (plane.isOn(curve3d.startPoint(), tol) == false)
+	{
+		return false;
+	}
+	if (plane.isOn(curve3d.endPoint(), tol) == false)
+	{
+		return false;
+	}
+	return true;
 }
 bool GeCircArc3d::isCoplanarWith(const GeRay3d& curve3d, GePlane& plane) const
 {
@@ -1628,9 +1832,16 @@ bool GeCircArc3d::isCoplanarWith(const GeRay3d& curve3d, GePlane& plane) const
 }
 bool GeCircArc3d::isCoplanarWith(const GeRay3d& curve3d, GePlane& plane, const GeTol& tol) const
 {
-	GeLine3d line1;
-	line1.set(curve3d.pointOnLine(), curve3d.direction());
-	return this->isCoplanarWith(line1, plane, tol);
+	this->getPlane(plane);
+	if (plane.isOn(curve3d.pointOnLine(), tol) == false)
+	{
+		return false;
+	}
+	if (curve3d.direction().isPerpendicularTo(plane.normal(), tol) == false)
+	{
+		return false;
+	}
+	return true;
 }
 bool GeCircArc3d::isCoplanarWith(const GeCircArc3d& curve3d, GePlane& plane) const
 {

@@ -1,12 +1,5 @@
 #include "GePointOnCurve3d.h"
-#include "GeLine2d.h"
-#include "GeLineSeg2d.h"
-#include "GeRay2d.h"
-#include "GeLine3d.h"
-#include "GeCircArc2d.h"
-#include "GeLineSeg3d.h"
-#include "GeRay3d.h"
-#include "GeCircArc3d.h"
+#include "GeCurve3d.h"
 #include "GeImpl.h"
 
 
@@ -45,40 +38,20 @@ double GePointOnCurve3d::parameter() const {
 	return GE_IMP_POINTONCURVE3D(this->m_pImpl)->param;
 }
 
-GePoint3d GePointOnCurve3d::point() {
+GePoint3d GePointOnCurve3d::point() const {
+	if (this->curve() == nullptr) {
+		return GePoint3d::kOrigin;
+	}
 	return this->point(GE_IMP_POINTONCURVE3D(this->m_pImpl)->param);
 }
-GePoint3d GePointOnCurve3d::point(double param) {
+GePoint3d GePointOnCurve3d::point(double param) const {
+	if (this->curve() == nullptr) {
+		return GePoint3d::kOrigin;
+	}
 	return this->point(*GE_IMP_POINTONCURVE3D(this->m_pImpl)->pCurve, param);
 }
-GePoint3d GePointOnCurve3d::point(const GeCurve3d& crv, double param) {
-	GePoint3d point;
-
-	if (crv.isKindOf(Ge::EntityId::kLine3d) == true) {
-		GeLine3d line = (GeLine3d&)crv;
-		point = line.pointOnLine();
-		point += line.direction() * param;
-	}
-	else if (crv.isKindOf(Ge::EntityId::kLinearEnt3d) == true) {
-		GeLineSeg3d line = (GeLineSeg3d&)crv;
-		point = line.pointOnLine();
-		point += line.direction() * param;
-	}
-	else if (crv.isKindOf(Ge::EntityId::kRay3d) == true) {
-		GeRay3d line = (GeRay3d&)crv;
-		point = line.pointOnLine();
-		point += line.direction() * param;
-	}
-	else if (crv.isKindOf(Ge::EntityId::kCircArc3d) == true) {
-
-		GeCircArc3d circArc = (GeCircArc3d&)crv;
-
-		GeVector3d refVec = circArc.refVec();
-		point = circArc.center() + refVec * circArc.radius();
-		point.rotateBy(param, circArc.normal(), circArc.center());
-	}
-
-	return point;
+GePoint3d GePointOnCurve3d::point(const GeCurve3d& crv, double param) const {
+	return crv.evalPoint(param);
 }
 
 GePointOnCurve3d& GePointOnCurve3d::setCurve(const GeCurve3d& crv) {
@@ -92,13 +65,12 @@ GePointOnCurve3d& GePointOnCurve3d::setParameter(double param) {
 
 
 bool GePointOnCurve3d::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
-		return true;
-	}
-	return false;
+	return entType == Ge::EntityId::kEntity3d
+		|| entType == Ge::EntityId::kPointEnt3d
+		|| entType == this->type();
 }
 Ge::EntityId GePointOnCurve3d::type() const {
-	return Ge::EntityId::kPointOnCurve2d;
+	return Ge::EntityId::kPointOnCurve3d;
 }
 GePointOnCurve3d* GePointOnCurve3d::copy() const {
 	GePointOnCurve3d* cur = new GePointOnCurve3d(*this);
@@ -147,14 +119,16 @@ bool GePointOnCurve3d::isOn(const GePoint3d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GePointOnCurve3d::isOn(const GePoint3d& pnt, const GeTol& tol) const {
-	return false;
+	if (this->curve() == nullptr) {
+		return false;
+	}
+	return this->point().isEqualTo(pnt, tol);
 }
 
 
 GePoint3d GePointOnCurve3d::point3d() const
 {
-	GePointOnCurve3d cur(*this);
-	return cur.point();
+	return this->point();
 }
 GePointOnCurve3d::operator GePoint3d () const {
 	return this->point3d();

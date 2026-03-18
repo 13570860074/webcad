@@ -4,6 +4,93 @@
 #include "GeLine2d.h"
 #include "GeImpl.h"
 
+namespace {
+void appendCorners(const GePoint2d& basePoint, const GeVector2d& dir1, const GeVector2d& dir2, GePoint2dArray& points)
+{
+	points.append(basePoint);
+	points.append(basePoint + dir1);
+	points.append(basePoint + dir2);
+	points.append(basePoint + dir1 + dir2);
+}
+
+void appendOrderedCorners(const GePoint2d& basePoint, const GeVector2d& dir1, const GeVector2d& dir2, GePoint2dArray& points)
+{
+	points.append(basePoint);
+	points.append(basePoint + dir1);
+	points.append(basePoint + dir1 + dir2);
+	points.append(basePoint + dir2);
+}
+
+bool containsOnSegment(const GePoint2d& startPoint, const GePoint2d& endPoint, const GePoint2d& point, const GeTol& tol)
+{
+	GeVector2d lineVector = endPoint - startPoint;
+	GeVector2d offset = point - startPoint;
+	double lengthSqrd = lineVector.lengthSqrd();
+	if (lengthSqrd <= tol.equalPoint() * tol.equalPoint()) {
+		return startPoint.isEqualTo(point, tol);
+	}
+
+	if (fabs(lineVector.crossProduct(offset)) > tol.equalPoint()) {
+		return false;
+	}
+
+	double projection = offset.dotProduct(lineVector);
+	if (projection < -tol.equalPoint()) {
+		return false;
+	}
+	if (projection > lengthSqrd + tol.equalPoint()) {
+		return false;
+	}
+
+	return true;
+}
+
+bool containsInParallelogram(const GePoint2d& basePoint, const GeVector2d& dir1, const GeVector2d& dir2, const GePoint2d& point, const GeTol& tol)
+{
+	GeVector2d offset = point - basePoint;
+	double determinant = dir1.crossProduct(dir2);
+	if (fabs(determinant) <= tol.equalPoint() * tol.equalPoint()) {
+		GePoint2d p1 = basePoint;
+		GePoint2d p2 = basePoint + dir1;
+		GePoint2d p3 = basePoint + dir2;
+		GePoint2d p4 = basePoint + dir1 + dir2;
+		return containsOnSegment(p1, p2, point, tol) ||
+			containsOnSegment(p1, p3, point, tol) ||
+			containsOnSegment(p2, p4, point, tol) ||
+			containsOnSegment(p3, p4, point, tol);
+	}
+
+	double u = offset.crossProduct(dir2) / determinant;
+	double v = dir1.crossProduct(offset) / determinant;
+	return u >= -tol.equalPoint() &&
+		u <= 1.0 + tol.equalPoint() &&
+		v >= -tol.equalPoint() &&
+		v <= 1.0 + tol.equalPoint();
+}
+
+bool hasEdgeIntersection(const GePoint2dArray& points1, const GePoint2dArray& points2)
+{
+	for (int i = 0; i < points1.length(); i++) {
+		GePoint2d start1 = points1[i];
+		GePoint2d end1 = points1[(i + 1) % points1.length()];
+		GeLineSeg2d edge1(start1, end1);
+
+		for (int u = 0; u < points2.length(); u++) {
+			GePoint2d start2 = points2[u];
+			GePoint2d end2 = points2[(u + 1) % points2.length()];
+			GeLineSeg2d edge2(start2, end2);
+
+			GePoint2d intersect;
+			if (edge1.intersectWith(edge2, intersect) == true) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+}
+
 
 
 GeBoundBlock2d::GeBoundBlock2d() {
@@ -28,17 +115,11 @@ GeBoundBlock2d::GeBoundBlock2d(const GeBoundBlock2d& source) {
 	GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->dir2 = GE_IMP_BOUNDBLOCK2D(source.m_pImpl)->dir2;
 }
 void GeBoundBlock2d::getMinMaxPoints(GePoint2d& p1, GePoint2d& p2) const {
-	GePoint2d point;
 	GePoint2dArray points;
-
-	point.set(GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->basePoint.x, GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->basePoint.y);
-	points.append(point);
-
-	point = point + GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->dir1;
-	points.append(point);
-
-	point = point + GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->dir2;
-	points.append(point);
+	appendCorners(GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->basePoint,
+		GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->dir1,
+		GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->dir2,
+		points);
 
 	for (int i = 0; i < points.length(); i++) {
 		if (i == 0) {
@@ -127,27 +208,7 @@ bool GeBoundBlock2d::contains(const GePoint2d& point) const {
 		return false;
 	}
 
-	GePoint2dArray points;
-	points.append(basePoint);
-	points.append(points[points.length() - 1] + dir1);
-	points.append(points[points.length() - 1] + dir2);
-	points.append(points[points.length() - 1] - dir1);
-	points.append(points[points.length() - 1] - dir2);
-
-	int numInter = 0;
-	GeRay2d ray(point, GeVector2d::kXAxis);
-	for (int i = 1; i < points.length(); i++) {
-		GeLineSeg2d line(points[i - 1], points[i]);
-
-		GePoint2d intersect;
-		if (ray.intersectWith(line, intersect) == true) {
-			numInter++;
-		}
-	}
-	if (numInter > 0 && numInter % 2 == 1) {
-		return true;
-	}
-	return false;
+	return containsInParallelogram(basePoint, dir1, dir2, point, GeContext::gTol);
 }
 bool GeBoundBlock2d::isDisjoint(const GeBoundBlock2d& block) const {
 
@@ -158,10 +219,7 @@ bool GeBoundBlock2d::isDisjoint(const GeBoundBlock2d& block) const {
 	block.get(basePoint, dir1, dir2);
 
 	GePoint2dArray pointOthers;
-	pointOthers.append(basePoint);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] + dir1);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] + dir2);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] - dir1);
+	appendCorners(basePoint, dir1, dir2, pointOthers);
 
 	for (int i = 0; i < pointOthers.length(); i++) {
 		if (this->contains(pointOthers[i]) == true) {
@@ -170,7 +228,33 @@ bool GeBoundBlock2d::isDisjoint(const GeBoundBlock2d& block) const {
 		}
 	}
 
-	return false;
+	if (isValue == true) {
+		this->get(basePoint, dir1, dir2);
+		GePoint2dArray pointItselfs;
+		appendCorners(basePoint, dir1, dir2, pointItselfs);
+		for (int i = 0; i < pointItselfs.length(); i++) {
+			if (block.contains(pointItselfs[i]) == true) {
+				isValue = false;
+				break;
+			}
+		}
+	}
+
+	if (isValue == true) {
+		GePoint2d selfBasePoint;
+		GeVector2d selfDir1, selfDir2;
+		this->get(selfBasePoint, selfDir1, selfDir2);
+
+		GePoint2dArray pointItselfs;
+		GePoint2dArray pointOthersOrdered;
+		appendOrderedCorners(selfBasePoint, selfDir1, selfDir2, pointItselfs);
+		appendOrderedCorners(basePoint, dir1, dir2, pointOthersOrdered);
+		if (hasEdgeIntersection(pointItselfs, pointOthersOrdered) == true) {
+			isValue = false;
+		}
+	}
+
+	return isValue;
 }
 GeBoundBlock2d& GeBoundBlock2d::operator =(const GeBoundBlock2d& block) {
 	GE_IMP_BOUNDBLOCK2D(this->m_pImpl)->isBox = GE_IMP_BOUNDBLOCK2D(block.m_pImpl)->isBox;

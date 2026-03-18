@@ -1,5 +1,5 @@
 #ifndef GEENTITY3D_H
-#define GEENTITY3D_H 
+#define GEENTITY3D_H
 
 #include "EmObject.h"
 #include "GePoint3d.h"
@@ -32,37 +32,40 @@ public:
     virtual bool isEqualTo(const GeEntity3d& entity) const;
     virtual bool isEqualTo(const GeEntity3d& entity, const GeTol& tol) const;
 
-
     // Matrix multiplication
     //
     virtual GeEntity3d& transformBy(const GeMatrix3d& xfm);
     virtual GeEntity3d& translateBy(const GeVector3d& translateVec);
     virtual GeEntity3d& rotateBy(double angle, const GeVector3d& vec);
-    virtual GeEntity3d& rotateBy(double angle, const GeVector3d& vec, const GePoint3d& wrtPoint);
+    virtual GeEntity3d& rotateBy(double angle, const GeVector3d& vec, const GePoint3d& wrtPoint = GePoint3d::kOrigin);
     virtual GeEntity3d& mirror(const GePlane& plane);
     virtual GeEntity3d& scaleBy(double scaleFactor);
-    virtual GeEntity3d& scaleBy(double scaleFactor, const GePoint3d& wrtPoint);
+    virtual GeEntity3d& scaleBy(double scaleFactor, const GePoint3d& wrtPoint = GePoint3d::kOrigin);
+
     // Point containment
     //
     virtual bool isOn(const GePoint3d& pnt) const;
     virtual bool isOn(const GePoint3d& pnt, const GeTol& tol) const;
 
-
 em_protected:
     GeEntity3d();
     GeEntity3d(const GeEntity3d& entity);
-
+    void connectTo(GeImpEntity3d* pImpl);
 
 em_protected:
     GeEntity3d(GeImpEntity3d*);
     GeImpEntity3d* m_pImpl;
 };
 
+#define GE_OPERATORS_OVERRIDE_3D(CLASS) \
+CLASS* copy() const; \
+CLASS& transformBy(const GeMatrix3d& xfm); \
+CLASS& translateBy(const GeVector3d& translateVec); \
+CLASS& rotateBy(double angle, const GeVector3d& vec); \
+CLASS& rotateBy(double angle, const GeVector3d& vec, const GePoint3d& wrtPoint = GePoint3d::kOrigin); \
+CLASS& mirror(const GePlane& plane); \
+CLASS& scaleBy(double scaleFactor); \
+CLASS& scaleBy(double scaleFactor, const GePoint3d& wrtPoint = GePoint3d::kOrigin);
 
-
-
-
-
-
-#endif 
+#endif
 

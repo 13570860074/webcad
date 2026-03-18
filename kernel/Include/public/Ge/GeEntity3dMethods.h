@@ -123,7 +123,7 @@ public:\
 	virtual double paramAtLength(double datumParam, double length, double tol) const;\
     virtual double area() const;\
 	virtual double area(const GeTol& tol) const;\
-	virtual void getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* piece2) const;\
+	virtual void getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const;\
 	virtual bool explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const;\
     virtual bool hasStartPoint(GePoint3d& startPoint) const;\
 	virtual bool hasEndPoint(GePoint3d& endPoint) const;\
@@ -222,7 +222,7 @@ void CLASSNAME::getClosestPointTo(const GeLine3d& curve3d, GePointOnCurve3d& pnt
 	pntOnThisCrv.setCurve(*this);\
 	pntOnThisCrv.setParameter(this->paramOf(pntOnThis));\
 	pntOnOtherCrv.setCurve(curve3d);\
-	pntOnOtherCrv.setParameter(this->paramOf(pntOnOther));\
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther));\
 }\
 void CLASSNAME::getClosestPointTo(const GeLineSeg3d& curve3d, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {\
 	this->getClosestPointTo(curve3d, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);\
@@ -233,7 +233,7 @@ void CLASSNAME::getClosestPointTo(const GeLineSeg3d& curve3d, GePointOnCurve3d& 
 	pntOnThisCrv.setCurve(*this);\
 	pntOnThisCrv.setParameter(this->paramOf(pntOnThis));\
 	pntOnOtherCrv.setCurve(curve3d);\
-	pntOnOtherCrv.setParameter(this->paramOf(pntOnOther));\
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther));\
 }\
 void CLASSNAME::getClosestPointTo(const GeRay3d& curve3d, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {\
 	this->getClosestPointTo(curve3d, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);\
@@ -244,7 +244,7 @@ void CLASSNAME::getClosestPointTo(const GeRay3d& curve3d, GePointOnCurve3d& pntO
 	pntOnThisCrv.setCurve(*this);\
 	pntOnThisCrv.setParameter(this->paramOf(pntOnThis));\
 	pntOnOtherCrv.setCurve(curve3d);\
-	pntOnOtherCrv.setParameter(this->paramOf(pntOnOther));\
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther));\
 }\
 void CLASSNAME::getClosestPointTo(const GeCircArc3d& curve3d, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const {\
 	this->getClosestPointTo(curve3d, pntOnThisCrv, pntOnOtherCrv, GeContext::gTol);\
@@ -255,7 +255,7 @@ void CLASSNAME::getClosestPointTo(const GeCircArc3d& curve3d, GePointOnCurve3d& 
 	pntOnThisCrv.setCurve(*this);\
 	pntOnThisCrv.setParameter(this->paramOf(pntOnThis));\
 	pntOnOtherCrv.setCurve(curve3d);\
-	pntOnOtherCrv.setParameter(this->paramOf(pntOnOther));\
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther));\
 }\
 
 

@@ -44,8 +44,8 @@ public:
     // Functions to evaluate a point.
     //
     GePoint3d point() const;
-    GePoint3d point(const GePoint2d& param);
-    GePoint3d point(const GeSurface& surf, const GePoint2d& param);
+    GePoint3d point(const GePoint2d& param) const;
+    GePoint3d point(const GeSurface& surf, const GePoint2d& param) const;
 
     // Set functions.
     //

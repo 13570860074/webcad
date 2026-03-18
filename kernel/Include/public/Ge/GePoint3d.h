@@ -55,7 +55,7 @@ public:
     }
     //GePoint3d(const GePlanarEnt& plane, const GePoint2d& pnt2d);
 
-    static const GePoint3d kOrigin; // Origin (0,0,0).
+    GE_STATIC_EXPORT static const GePoint3d kOrigin; // Origin (0,0,0).
 
     friend GePoint3d operator *(const GeMatrix3d& matrix, const GePoint3d& point);
     friend GePoint3d operator *(double scale, const GePoint3d& point) {

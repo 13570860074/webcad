@@ -23,6 +23,12 @@ class GeCurve2d : public GeEntity2d
 {
 public:
 
+    virtual void getInterval(GeInterval& range) const;
+    virtual void getInterval(GeInterval& range, GePoint2d& startPoint, GePoint2d& endPoint) const;
+    virtual GeCurve2d& reverseParam();
+    virtual GeCurve2d& setInterval();
+    virtual bool setInterval(const GeInterval& range);
+
     // Distance to other geometric objects.
     //
     virtual double distanceTo(const GePoint2d& pnt) const;
@@ -35,6 +41,7 @@ public:
     //
     virtual GePoint2d closestPointTo(const GePoint2d& pnt) const;
     virtual GePoint2d closestPointTo(const GePoint2d& pnt, const GeTol& tol) const;
+    virtual GePoint2d closestPointTo(const GePoint2d& pnt, double& param, const GeInterval* range, const GeTol& tol = GeContext::gTol) const;
     virtual GePoint2d closestPointTo(const GeCurve2d& curve2d, GePoint2d& pntOnOtherCrv) const;
     virtual GePoint2d closestPointTo(const GeCurve2d& curve2d, GePoint2d& pntOnOtherCrv, const GeTol& tol) const;
 
@@ -59,6 +66,10 @@ public:
     //
     virtual bool isOn(const GePoint2d& pnt) const;
     virtual bool isOn(const GePoint2d& pnt, const GeTol& tol) const;
+    virtual bool isOn(const GePoint2d& pnt, double& param) const;
+    virtual bool isOn(const GePoint2d& pnt, double& param, const GeTol& tol) const;
+    virtual bool isOn(double param) const;
+    virtual bool isOn(double param, const GeTol& tol) const;
 
     // Parameter of the point on curve.  Contract: point IS on curve
     //
@@ -91,7 +102,7 @@ public:
 
     // Modify methods.
     //
-    virtual void getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* piece2) const;
+    virtual void getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const;
 
     // Explode curve into its component sub-curves.
     //

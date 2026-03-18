@@ -378,13 +378,14 @@ public:
 	GeSphereImpl()
 	{
 		this->center = GePoint3d::kOrigin;
-		this->radius = 0;
-		this->northAxis = GeVector3d::kZAxis;
+		this->radius = 1.0;
+		this->northAxis = GeVector3d::kYAxis;
 		this->refAxis = GeVector3d::kXAxis;
-		this->startAngleU = 0.0;
-		this->endAngleU = 1.0;
-		this->startAngleV = 0.0;
-		this->endAngleV = 1.0;
+		this->startAngleU = -PI * 0.5;
+		this->endAngleU = PI * 0.5;
+		this->startAngleV = -PI;
+		this->endAngleV = PI;
+		this->isOuterNormal = false;
 	}
 	virtual ~GeSphereImpl()
 	{
@@ -398,6 +399,7 @@ public:
 	double endAngleU;
 	double startAngleV;
 	double endAngleV;
+	bool isOuterNormal;
 };
 
 #endif

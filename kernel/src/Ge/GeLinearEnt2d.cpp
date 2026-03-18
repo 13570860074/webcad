@@ -86,7 +86,27 @@ bool GeLinearEnt2d::intersectWith(const GeLinearEnt2d& line, GePoint2d& intPnt) 
 }
 bool GeLinearEnt2d::intersectWith(const GeLinearEnt2d& line, GePoint2d& intPnt, const GeTol& tol) const
 {
-	return false;
+	GePoint2d thisOrigin = GE_IMP_LINEARENT2D(this->m_pImpl)->origin;
+	GePoint2d otherOrigin = GE_IMP_LINEARENT2D(line.m_pImpl)->origin;
+	GeVector2d thisVector = GE_IMP_LINEARENT2D(this->m_pImpl)->vector;
+	GeVector2d otherVector = GE_IMP_LINEARENT2D(line.m_pImpl)->vector;
+
+	double denominator = thisVector.crossProduct(otherVector);
+	if (abs(denominator) <= tol.equalVector())
+	{
+		return false;
+	}
+
+	GeVector2d delta = otherOrigin - thisOrigin;
+	double thisParam = delta.crossProduct(otherVector) / denominator;
+	GePoint2d point = thisOrigin + thisVector * thisParam;
+	if (this->isOn(point, tol) == false || line.isOn(point, tol) == false)
+	{
+		return false;
+	}
+
+	intPnt = point;
+	return true;
 }
 bool GeLinearEnt2d::isParallelTo(const GeLinearEnt2d& line) const {
 	return this->isParallelTo(line, GeContext::gTol);
@@ -100,32 +120,22 @@ bool GeLinearEnt2d::isPerpendicularTo(const GeLinearEnt2d& line) const {
 }
 bool GeLinearEnt2d::isPerpendicularTo(const GeLinearEnt2d& line, const GeTol& tol) const
 {
-	double angle = GE_IMP_LINEARENT2D(this->m_pImpl)->vector.angleTo(GE_IMP_LINEARENT2D(line.m_pImpl)->vector);
-	if (abs(angle - PI / 2) < tol.equalPoint() || abs(angle - PI / 2 * 2) < tol.equalPoint())
-	{
-		return true;
-	}
-	return false;
+	return GE_IMP_LINEARENT2D(this->m_pImpl)->vector.isPerpendicularTo(GE_IMP_LINEARENT2D(line.m_pImpl)->vector, tol);
 }
 bool GeLinearEnt2d::isColinearTo(const GeLinearEnt2d& line) const {
 	return this->isColinearTo(line, GeContext::gTol);
 }
 bool GeLinearEnt2d::isColinearTo(const GeLinearEnt2d& line, const GeTol& tol) const
 {
-	GeVector2d v1 = GE_IMP_LINEARENT2D(this->m_pImpl)->vector;
-	GeVector2d v2 = GE_IMP_LINEARENT2D(line.m_pImpl)->vector;
-	v1.normalize();
-	v2.normalize();
-	if (abs(v1.angleTo(v2)) < tol.equalVector() || abs(v1.angleTo(v2) - PI) < tol.equalVector())
+	if (this->isParallelTo(line, tol) == false)
 	{
 		return false;
 	}
-	return true;
+	return this->isOn(line.pointOnLine(), tol);
 }
 void GeLinearEnt2d::getPerpLine(const GePoint2d& point, GeLine2d& perpLine) const
 {
-	GePoint2d Vertical = GeLinearEnt2d::vertical(point, *this);
-	perpLine.set(point, (Vertical - point).perpVector().normalize());
+	perpLine.set(point, this->direction().perpVector());
 }
 GePoint2d GeLinearEnt2d::pointOnLine() const
 {

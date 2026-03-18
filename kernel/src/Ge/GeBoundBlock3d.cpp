@@ -6,6 +6,190 @@
 #include "GePoint3dArray.h"
 #include "GeImpl.h"
 
+namespace {
+void appendCorners(const GePoint3d& basePoint, const GeVector3d& dir1, const GeVector3d& dir2, const GeVector3d& dir3, GePoint3dArray& points)
+{
+	points.append(basePoint);
+	points.append(basePoint + dir1);
+	points.append(basePoint + dir2);
+	points.append(basePoint + dir3);
+	points.append(basePoint + dir1 + dir2);
+	points.append(basePoint + dir1 + dir3);
+	points.append(basePoint + dir2 + dir3);
+	points.append(basePoint + dir1 + dir2 + dir3);
+}
+
+double tripleProduct(const GeVector3d& vec1, const GeVector3d& vec2, const GeVector3d& vec3)
+{
+	return vec1.dotProduct(vec2.crossProduct(vec3));
+}
+
+bool containsInParallelepiped(const GePoint3d& basePoint, const GeVector3d& dir1, const GeVector3d& dir2, const GeVector3d& dir3, const GePoint3d& point, const GeTol& tol)
+{
+	double determinant = tripleProduct(dir1, dir2, dir3);
+	double determinantTol = tol.equalVector() * tol.equalVector() * tol.equalVector();
+	if (fabs(determinant) <= determinantTol)
+	{
+		return false;
+	}
+
+	GeVector3d offset = point - basePoint;
+	double u = tripleProduct(offset, dir2, dir3) / determinant;
+	double v = tripleProduct(dir1, offset, dir3) / determinant;
+	double w = tripleProduct(dir1, dir2, offset) / determinant;
+
+	return u >= -tol.equalPoint() &&
+		u <= 1.0 + tol.equalPoint() &&
+		v >= -tol.equalPoint() &&
+		v <= 1.0 + tol.equalPoint() &&
+		w >= -tol.equalPoint() &&
+		w <= 1.0 + tol.equalPoint();
+}
+
+bool containsInFace(const GePoint3d& origin, const GeVector3d& side1, const GeVector3d& side2, const GePoint3d& point, const GeTol& tol)
+{
+	GeVector3d normal = side1.crossProduct(side2);
+	double normalLength = normal.length();
+	if (normalLength <= tol.equalVector())
+	{
+		return false;
+	}
+
+	GeVector3d offset = point - origin;
+	if (fabs(offset.dotProduct(normal)) > tol.equalPoint() * normalLength)
+	{
+		return false;
+	}
+
+	double denominator = normal.lengthSqrd();
+	double u = tripleProduct(offset, side2, normal) / denominator;
+	double v = tripleProduct(side1, offset, normal) / denominator;
+	return u >= -tol.equalPoint() &&
+		u <= 1.0 + tol.equalPoint() &&
+		v >= -tol.equalPoint() &&
+		v <= 1.0 + tol.equalPoint();
+}
+
+bool segmentIntersectsFace(const GePoint3d& startPoint, const GePoint3d& endPoint, const GePoint3d& origin, const GeVector3d& side1, const GeVector3d& side2, const GeTol& tol)
+{
+	if (containsInFace(origin, side1, side2, startPoint, tol) == true ||
+		containsInFace(origin, side1, side2, endPoint, tol) == true)
+	{
+		return true;
+	}
+
+	GeVector3d normal = side1.crossProduct(side2);
+	double normalLength = normal.length();
+	if (normalLength <= tol.equalVector())
+	{
+		return false;
+	}
+
+	GeVector3d direction = endPoint - startPoint;
+	GeVector3d startOffset = startPoint - origin;
+	double startDistance = startOffset.dotProduct(normal);
+	double endDistance = (endPoint - origin).dotProduct(normal);
+	double denominator = normal.dotProduct(direction);
+
+	if (fabs(denominator) <= tol.equalVector())
+	{
+		if (fabs(startDistance) > tol.equalPoint() * normalLength || fabs(endDistance) > tol.equalPoint() * normalLength)
+		{
+			return false;
+		}
+
+		GePoint3d facePoints[4] = {
+			origin,
+			origin + side1,
+			origin + side1 + side2,
+			origin + side2
+		};
+		int faceEdges[4][2] = {
+			{0, 1},
+			{1, 2},
+			{2, 3},
+			{3, 0}
+		};
+
+		GeLineSeg3d segment(startPoint, endPoint);
+		for (int i = 0; i < 4; i++)
+		{
+			GeLineSeg3d faceEdge(facePoints[faceEdges[i][0]], facePoints[faceEdges[i][1]]);
+			GePoint3d intersect;
+			if (segment.intersectWith(faceEdge, intersect, tol) == true)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	double lineParam = -startDistance / denominator;
+	if (lineParam < -tol.equalPoint() || lineParam > 1.0 + tol.equalPoint())
+	{
+		return false;
+	}
+
+	GePoint3d intersect = startPoint + direction * lineParam;
+	return containsInFace(origin, side1, side2, intersect, tol);
+}
+
+bool hasEdgeFaceIntersection(const GePoint3d& edgeBase, const GeVector3d& edgeDir1, const GeVector3d& edgeDir2, const GeVector3d& edgeDir3,
+	const GePoint3d& faceBase, const GeVector3d& faceDir1, const GeVector3d& faceDir2, const GeVector3d& faceDir3, const GeTol& tol)
+{
+	GePoint3dArray edgePoints;
+	appendCorners(edgeBase, edgeDir1, edgeDir2, edgeDir3, edgePoints);
+
+	int edgePairs[12][2] = {
+		{0, 1}, {0, 2}, {0, 3},
+		{1, 4}, {1, 5},
+		{2, 4}, {2, 6},
+		{3, 5}, {3, 6},
+		{4, 7}, {5, 7}, {6, 7}
+	};
+
+	GePoint3d faceOrigins[6] = {
+		faceBase,
+		faceBase + faceDir3,
+		faceBase,
+		faceBase + faceDir2,
+		faceBase,
+		faceBase + faceDir1
+	};
+	GeVector3d faceSides1[6] = {
+		faceDir1,
+		faceDir1,
+		faceDir1,
+		faceDir1,
+		faceDir2,
+		faceDir2
+	};
+	GeVector3d faceSides2[6] = {
+		faceDir2,
+		faceDir2,
+		faceDir3,
+		faceDir3,
+		faceDir3,
+		faceDir3
+	};
+
+	for (int i = 0; i < 12; i++)
+	{
+		GePoint3d startPoint = edgePoints[edgePairs[i][0]];
+		GePoint3d endPoint = edgePoints[edgePairs[i][1]];
+		for (int u = 0; u < 6; u++)
+		{
+			if (segmentIntersectsFace(startPoint, endPoint, faceOrigins[u], faceSides1[u], faceSides2[u], tol) == true)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+}
+
 
 
 GeBoundBlock3d::GeBoundBlock3d() {
@@ -31,21 +215,12 @@ GeBoundBlock3d::GeBoundBlock3d(const GeBoundBlock3d& source) {
 	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3 = GE_IMP_BOUNDBLOCK3D(source.m_pImpl)->dir3;
 }
 void GeBoundBlock3d::getMinMaxPoints(GePoint3d& p1, GePoint3d& p2) const {
-
-	GePoint3d point;
 	GePoint3dArray points;
-
-	point.set(GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint.x, GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint.y, GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint.z);
-	points.append(point);
-
-	point = point + GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir1;
-	points.append(point);
-
-	point = point + GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir2;
-	points.append(point);
-
-	point = point + GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3;
-	points.append(point);
+	appendCorners(GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint,
+		GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir1,
+		GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir2,
+		GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3,
+		points);
 
 	for (int i = 0; i < points.length(); i++) {
 		if (i == 0) {
@@ -146,52 +321,10 @@ GeBoundBlock3d& GeBoundBlock3d::swell(double distance) {
 	return *this;
 }
 bool GeBoundBlock3d::contains(const GePoint3d& point) const {
-	
 	GePoint3d basePoint;
 	GeVector3d dir1, dir2, dir3;
 	this->get(basePoint, dir1, dir2, dir3);
-
-	int numIntersec = 0;
-
-	GeRay3d ray(point, GeVector3d::kXAxis);
-
-	GePoint3d intersect;
-	GeBoundedPlane boundedPlane;
-
-	boundedPlane.set(basePoint, dir1, dir2);
-	if (boundedPlane.intersectWith(ray, intersect) == true) {
-		numIntersec++;
-	}
-
-	boundedPlane.set(basePoint + dir3, dir1, dir2);
-	if (boundedPlane.intersectWith(ray, intersect) == true) {
-		numIntersec++;
-	}
-
-	boundedPlane.set(basePoint, dir2, dir3);
-	if (boundedPlane.intersectWith(ray, intersect) == true) {
-		numIntersec++;
-	}
-
-	boundedPlane.set(basePoint + dir1, dir2, dir3);
-	if (boundedPlane.intersectWith(ray, intersect) == true) {
-		numIntersec++;
-	}
-
-	boundedPlane.set(basePoint, dir1, dir3);
-	if (boundedPlane.intersectWith(ray, intersect) == true) {
-		numIntersec++;
-	}
-
-	boundedPlane.set(basePoint + dir2, dir1, dir3);
-	if (boundedPlane.intersectWith(ray, intersect) == true) {
-		numIntersec++;
-	}
-
-	if (numIntersec % 2 == 0) {
-		return false;
-	}
-	return true;
+	return containsInParallelepiped(basePoint, dir1, dir2, dir3, point, GeContext::gTol);
 }
 bool GeBoundBlock3d::isDisjoint(const GeBoundBlock3d& block) const {
 
@@ -202,14 +335,7 @@ bool GeBoundBlock3d::isDisjoint(const GeBoundBlock3d& block) const {
 	block.get(basePoint, dir1, dir2, dir3);
 
 	GePoint3dArray pointOthers;
-	pointOthers.append(basePoint);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] + dir1);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] + dir2);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] - dir1);
-	pointOthers.append(basePoint + dir3);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] + dir1 + dir3);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] + dir2 + dir3);
-	pointOthers.append(pointOthers[pointOthers.length() - 1] - dir1 + dir3);
+	appendCorners(basePoint, dir1, dir2, dir3, pointOthers);
 
 	for (int i = 0; i < pointOthers.length(); i++) {
 		if (this->contains(pointOthers[i]) == true) {
@@ -218,13 +344,37 @@ bool GeBoundBlock3d::isDisjoint(const GeBoundBlock3d& block) const {
 		}
 	}
 
-	return false;
+	if (isValue == true) {
+		this->get(basePoint, dir1, dir2, dir3);
+		GePoint3dArray pointItselfs;
+		appendCorners(basePoint, dir1, dir2, dir3, pointItselfs);
+		for (int i = 0; i < pointItselfs.length(); i++) {
+			if (block.contains(pointItselfs[i]) == true) {
+				isValue = false;
+				break;
+			}
+		}
+	}
+
+	if (isValue == true) {
+		GePoint3d selfBasePoint;
+		GeVector3d selfDir1, selfDir2, selfDir3;
+		this->get(selfBasePoint, selfDir1, selfDir2, selfDir3);
+		if (hasEdgeFaceIntersection(selfBasePoint, selfDir1, selfDir2, selfDir3, basePoint, dir1, dir2, dir3, GeContext::gTol) == true ||
+			hasEdgeFaceIntersection(basePoint, dir1, dir2, dir3, selfBasePoint, selfDir1, selfDir2, selfDir3, GeContext::gTol) == true)
+		{
+			isValue = false;
+		}
+	}
+
+	return isValue;
 }
 GeBoundBlock3d& GeBoundBlock3d::operator =(const GeBoundBlock3d& block) {
 	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->isBox = GE_IMP_BOUNDBLOCK3D(block.m_pImpl)->isBox;
 	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint = GE_IMP_BOUNDBLOCK3D(block.m_pImpl)->basePoint;
 	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir1 = GE_IMP_BOUNDBLOCK3D(block.m_pImpl)->dir1;
 	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir2 = GE_IMP_BOUNDBLOCK3D(block.m_pImpl)->dir2;
+	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3 = GE_IMP_BOUNDBLOCK3D(block.m_pImpl)->dir3;
 	return *this;
 }
 bool GeBoundBlock3d::isBox() const {

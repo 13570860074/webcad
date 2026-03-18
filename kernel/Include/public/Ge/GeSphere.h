@@ -15,6 +15,10 @@ public:
              double startAngleV, double endAngleV);
     GeSphere(const GeSphere &sphere);
 
+    bool isKindOf(Ge::EntityId entType) const;
+    Ge::EntityId type() const;
+    GeSphere* copy() const;
+
     // Geometric properties.
     //
     double radius() const;
@@ -48,6 +52,24 @@ public:
     Adesk::Boolean intersectWith(const GeLinearEnt3d &, int &intn,
                                  GePoint3d &p1, GePoint3d &p2,
                                  const GeTol &tol = GeContext::gTol) const;
+
+    GePoint2d paramOf(const GePoint3d& pnt) const;
+    GePoint2d paramOf(const GePoint3d& pnt, const GeTol& tol) const;
+    bool isOn(const GePoint3d& pnt) const;
+    bool isOn(const GePoint3d& pnt, const GeTol& tol) const;
+    bool isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const;
+    bool isOn(const GePoint3d& pnt, GePoint2d& paramPoint, const GeTol& tol) const;
+    GePoint3d closestPointTo(const GePoint3d& pnt) const;
+    GePoint3d closestPointTo(const GePoint3d& pnt, const GeTol& tol) const;
+    void getClosestPointTo(const GePoint3d& pnt, GePointOnSurface& result) const;
+    void getClosestPointTo(const GePoint3d& pnt, GePointOnSurface& result, const GeTol& tol) const;
+    double distanceTo(const GePoint3d& pnt) const;
+    double distanceTo(const GePoint3d& pnt, const GeTol& tol) const;
+    bool isNormalReversed() const;
+    bool isLeftHanded() const;
+    GeSurface& reverseNormal();
+    void getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const;
+    GePoint3d evalPoint(const GePoint2d& param) const;
 };
 
 #endif

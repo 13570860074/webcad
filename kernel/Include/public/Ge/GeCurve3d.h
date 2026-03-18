@@ -28,6 +28,12 @@ class GeCurve3d : public GeEntity3d
 {
 public:
 
+    virtual void getInterval(GeInterval& range) const;
+    virtual void getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const;
+    virtual GeCurve3d& reverseParam();
+    virtual GeCurve3d& setInterval();
+    virtual bool setInterval(const GeInterval& range);
+
     // Distance to other geometric objects.
     //
     virtual double distanceTo(const GePoint3d& pnt) const;
@@ -40,6 +46,7 @@ public:
     //
     virtual GePoint3d closestPointTo(const GePoint3d& pnt) const;
     virtual GePoint3d closestPointTo(const GePoint3d& pnt, const GeTol& tol) const;
+    virtual GePoint3d closestPointTo(const GePoint3d& pnt, double& param, const GeInterval* range, const GeTol& tol = GeContext::gTol) const;
     virtual GePoint3d closestPointTo(const GeCurve3d& curve3d, GePoint3d& pntOnOtherCrv) const;
     virtual GePoint3d closestPointTo(const GeCurve3d& curve3d, GePoint3d& pntOnOtherCrv, const GeTol& tol) const;
 
@@ -136,7 +143,7 @@ public:
 
     // Modify methods.
     //
-    virtual void getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* piece2) const;
+    virtual void getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const;
 
     // Explode curve into its component sub-curves.
     //

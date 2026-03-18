@@ -1,8 +1,9 @@
 #ifndef GEDLL_H
 #define GEDLL_H
 
-#define GE_EXPORT __declspec (dllexport) 
-#define GE_STATIC_EXPORT __declspec (dllexport) 
+#include "export.h"
 
+#define GE_EXPORT EXPORT
+#define GE_STATIC_EXPORT STATIC_EXPORT
 
 #endif

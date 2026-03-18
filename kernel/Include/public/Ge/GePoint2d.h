@@ -28,7 +28,7 @@ public:
     {
     }
 
-    static const GePoint2d kOrigin; // Origin (0,0).
+    GE_STATIC_EXPORT static const GePoint2d kOrigin; // Origin (0,0).
 
     friend GePoint2d operator *(const GeMatrix2d& matrix,const GePoint2d& point);
 

@@ -37,6 +37,11 @@ public:
     // Assignment operator.
     //
     GeLineSeg3d& operator =  (const GeLineSeg3d& line);
+
+    // Interval.
+    //
+    void getInterval(GeInterval& range) const override;
+    void getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const override;
 };
 
 #endif

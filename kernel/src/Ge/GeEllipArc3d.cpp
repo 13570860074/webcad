@@ -115,6 +115,271 @@ namespace
 		}
 		return true;
 	}
+
+	void ellip_append_unique_point(GePoint3dArray& points, const GePoint3d& point, const GeTol& tol)
+	{
+		for (int i = 0; i < points.length(); i++)
+		{
+			if (points[i].isEqualTo(point, tol) == true)
+			{
+				return;
+			}
+		}
+		points.append(point);
+	}
+
+	bool ellip_intersect_line_in_plane(const GeEllipArc3d& arc, const GeLinearEnt3d& line, const GeTol& tol, GePoint3dArray& points)
+	{
+		GeVector3d majorAxis = arc.majorAxis();
+		GeVector3d minorAxis = arc.minorAxis();
+		double majorRadius = majorAxis.length();
+		double minorRadius = minorAxis.length();
+		if (majorRadius < tol.equalPoint() || minorRadius < tol.equalPoint())
+		{
+			return false;
+		}
+
+		GeVector3d majorUnit = majorAxis.normal();
+		GeVector3d minorUnit = minorAxis.normal();
+		GeVector3d offset = line.pointOnLine() - arc.center();
+		GeVector3d direction = line.direction();
+
+		double x0 = offset.dotProduct(majorUnit);
+		double y0 = offset.dotProduct(minorUnit);
+		double dx = direction.dotProduct(majorUnit);
+		double dy = direction.dotProduct(minorUnit);
+
+		double a = (dx * dx) / (majorRadius * majorRadius) + (dy * dy) / (minorRadius * minorRadius);
+		double b = 2.0 * ((x0 * dx) / (majorRadius * majorRadius) + (y0 * dy) / (minorRadius * minorRadius));
+		double c = (x0 * x0) / (majorRadius * majorRadius) + (y0 * y0) / (minorRadius * minorRadius) - 1.0;
+
+		if (fabs(a) <= tol.equalVector())
+		{
+			return false;
+		}
+
+		double discriminant = b * b - 4.0 * a * c;
+		if (discriminant < -tol.equalPoint())
+		{
+			return false;
+		}
+
+		if (fabs(discriminant) <= tol.equalPoint())
+		{
+			double lineParam = -b / (2.0 * a);
+			GePoint3d point = line.pointOnLine() + direction * lineParam;
+			if (line.isOn(point, tol) == true && arc.isOn(point, tol) == true)
+			{
+				ellip_append_unique_point(points, point, tol);
+			}
+			return points.length() > 0;
+		}
+
+		double root = sqrt(discriminant);
+		double lineParam1 = (-b + root) / (2.0 * a);
+		double lineParam2 = (-b - root) / (2.0 * a);
+
+		GePoint3d point1 = line.pointOnLine() + direction * lineParam1;
+		if (line.isOn(point1, tol) == true && arc.isOn(point1, tol) == true)
+		{
+			ellip_append_unique_point(points, point1, tol);
+		}
+
+		GePoint3d point2 = line.pointOnLine() + direction * lineParam2;
+		if (line.isOn(point2, tol) == true && arc.isOn(point2, tol) == true)
+		{
+			ellip_append_unique_point(points, point2, tol);
+		}
+
+		return points.length() > 0;
+	}
+
+	GePoint3dArray ellip_intersect_with_linear(const GeEllipArc3d& arc, const GeLinearEnt3d& line, const GeTol& tol)
+	{
+		GePoint3dArray points;
+		GeVector3d normal = arc.normal();
+		GeVector3d direction = line.direction();
+		if (direction.length() < tol.equalVector())
+		{
+			return points;
+		}
+
+		GeVector3d offset = line.pointOnLine() - arc.center();
+		double denom = normal.dotProduct(direction);
+		double numer = normal.dotProduct(offset);
+
+		if (fabs(denom) <= tol.equalVector())
+		{
+			if (fabs(numer) > tol.equalPoint())
+			{
+				return points;
+			}
+			ellip_intersect_line_in_plane(arc, line, tol, points);
+			return points;
+		}
+
+		double lineParam = -numer / denom;
+		GePoint3d point = line.pointOnLine() + direction * lineParam;
+		if (line.isOn(point, tol) == true && arc.isOn(point, tol) == true)
+		{
+			points.append(point);
+		}
+
+		return points;
+	}
+
+	double ellip_circle_residual(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, double param)
+	{
+		GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), ellip_normalize_param(param));
+		return point.distanceTo(circle.center()) - circle.radius();
+	}
+
+	double ellip_circle_abs_residual(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, double param)
+	{
+		return fabs(ellip_circle_residual(ellipse, circle, param));
+	}
+
+	double ellip_bisect_circle_param(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, double fromParam, double toParam, const GeTol& tol)
+	{
+		double leftParam = fromParam;
+		double rightParam = toParam;
+		double leftValue = ellip_circle_residual(ellipse, circle, leftParam);
+		double rightValue = ellip_circle_residual(ellipse, circle, rightParam);
+		double midParam = (leftParam + rightParam) * 0.5;
+
+		for (int i = 0; i < 64; i++)
+		{
+			midParam = (leftParam + rightParam) * 0.5;
+			double midValue = ellip_circle_residual(ellipse, circle, midParam);
+			if (fabs(midValue) <= tol.equalPoint())
+			{
+				break;
+			}
+
+			if (leftValue * midValue <= 0.0)
+			{
+				rightParam = midParam;
+				rightValue = midValue;
+			}
+			else
+			{
+				leftParam = midParam;
+				leftValue = midValue;
+			}
+		}
+
+		return ellip_normalize_param(midParam);
+	}
+
+	double ellip_refine_circle_min_param(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, double fromParam, double toParam)
+	{
+		double leftParam = fromParam;
+		double rightParam = toParam;
+		const double goldenRatio = 0.6180339887498949;
+		double x1 = rightParam - (rightParam - leftParam) * goldenRatio;
+		double x2 = leftParam + (rightParam - leftParam) * goldenRatio;
+		double f1 = ellip_circle_abs_residual(ellipse, circle, x1);
+		double f2 = ellip_circle_abs_residual(ellipse, circle, x2);
+
+		for (int i = 0; i < 64; i++)
+		{
+			if (f1 <= f2)
+			{
+				rightParam = x2;
+				x2 = x1;
+				f2 = f1;
+				x1 = rightParam - (rightParam - leftParam) * goldenRatio;
+				f1 = ellip_circle_abs_residual(ellipse, circle, x1);
+			}
+			else
+			{
+				leftParam = x1;
+				x1 = x2;
+				f1 = f2;
+				x2 = leftParam + (rightParam - leftParam) * goldenRatio;
+				f2 = ellip_circle_abs_residual(ellipse, circle, x2);
+			}
+		}
+
+		return ellip_normalize_param((leftParam + rightParam) * 0.5);
+	}
+
+	void ellip_intersect_coplanar_circle(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, const GeTol& tol, GePoint3dArray& points)
+	{
+		double sweep = ellipse.isClosed(tol) == true ? PI * 2.0 : ellip_param_sweep(ellipse.startAng(), ellipse.endAng());
+		if (sweep <= tol.equalPoint())
+		{
+			sweep = PI * 2.0;
+		}
+
+		int numSegments = 2048;
+		if (sweep < PI * 2.0)
+		{
+			numSegments = static_cast<int>(2048.0 * sweep / (PI * 2.0));
+			if (numSegments < 256)
+			{
+				numSegments = 256;
+			}
+		}
+
+		double startParam = ellipse.startAng();
+		double prevParam = startParam;
+		double prevValue = ellip_circle_residual(ellipse, circle, prevParam);
+		if (fabs(prevValue) <= tol.equalPoint())
+		{
+			GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), prevParam);
+			if (ellipse.isOn(point, tol) == true && circle.isOn(point, tol) == true)
+			{
+				ellip_append_unique_point(points, point, tol);
+			}
+		}
+
+		for (int i = 1; i <= numSegments; i++)
+		{
+			double currentParam = startParam + sweep * i / numSegments;
+			double currentValue = ellip_circle_residual(ellipse, circle, currentParam);
+
+			if (fabs(currentValue) <= tol.equalPoint())
+			{
+				GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), currentParam);
+				if (ellipse.isOn(point, tol) == true && circle.isOn(point, tol) == true)
+				{
+					ellip_append_unique_point(points, point, tol);
+				}
+			}
+
+			if (prevValue * currentValue < 0.0)
+			{
+				double param = ellip_bisect_circle_param(ellipse, circle, prevParam, currentParam, tol);
+				GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), param);
+				if (ellipse.isOn(point, tol) == true && circle.isOn(point, tol) == true)
+				{
+					ellip_append_unique_point(points, point, tol);
+				}
+			}
+
+			if (i < numSegments)
+			{
+				double nextParam = startParam + sweep * (i + 1) / numSegments;
+				double nextValue = ellip_circle_residual(ellipse, circle, nextParam);
+				if (fabs(currentValue) <= fabs(prevValue) && fabs(currentValue) <= fabs(nextValue))
+				{
+					double param = ellip_refine_circle_min_param(ellipse, circle, prevParam, nextParam);
+					if (ellip_circle_abs_residual(ellipse, circle, param) <= tol.equalPoint())
+					{
+						GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), param);
+						if (ellipse.isOn(point, tol) == true && circle.isOn(point, tol) == true)
+						{
+							ellip_append_unique_point(points, point, tol);
+						}
+					}
+				}
+			}
+
+			prevParam = currentParam;
+			prevValue = currentValue;
+		}
+	}
 }
 
 GeEllipArc3d::GeEllipArc3d()
@@ -193,8 +458,7 @@ GePoint3dArray GeEllipArc3d::intersectWith(const GeLinearEnt3d& line) const
 }
 GePoint3dArray GeEllipArc3d::intersectWith(const GeLinearEnt3d& line, const GeTol& tol) const
 {
-	GePoint3dArray points;
-	return points;
+	return ellip_intersect_with_linear(*this, line, tol);
 }
 GePoint3dArray GeEllipArc3d::intersectWith(const GeCircArc3d& arc) const
 {
@@ -202,7 +466,41 @@ GePoint3dArray GeEllipArc3d::intersectWith(const GeCircArc3d& arc) const
 }
 GePoint3dArray GeEllipArc3d::intersectWith(const GeCircArc3d& arc, const GeTol& tol) const
 {
+	if (this->isCircular(tol) == true)
+	{
+		GeCircArc3d circle;
+		circle.set(this->center(), this->normal(), this->majorAxis().normal(), this->majorRadius(), this->startAng(), this->endAng());
+		return circle.intersectWith(arc, tol);
+	}
+
+	GePlane ellipsePlane;
+	GePlane arcPlane;
+	this->getPlane(ellipsePlane);
+	arc.getPlane(arcPlane);
+
+	if (ellipsePlane.isCoplanarTo(arcPlane, tol) == true)
+	{
+		GePoint3dArray points;
+		ellip_intersect_coplanar_circle(*this, arc, tol, points);
+		return points;
+	}
+
+	GeLine3d intersectLine;
+	if (ellipsePlane.intersectWith(arcPlane, intersectLine, tol) == false)
+	{
+		GePoint3dArray points;
+		return points;
+	}
+
+	GePoint3dArray circlePoints = arc.intersectWith(intersectLine, tol);
 	GePoint3dArray points;
+	for (int i = 0; i < circlePoints.length(); i++)
+	{
+		if (this->isOn(circlePoints[i], tol) == true)
+		{
+			ellip_append_unique_point(points, circlePoints[i], tol);
+		}
+	}
 	return points;
 }
 
@@ -411,7 +709,7 @@ GeEllipArc3d& GeEllipArc3d::operator = (const GeEllipArc3d& arc)
 
 bool GeEllipArc3d::isKindOf(Ge::EntityId entType) const
 {
-	if (entType == this->type())
+	if (entType == Ge::kEntity3d || entType == Ge::kCurve3d || entType == this->type())
 	{
 		return true;
 	}
@@ -565,8 +863,10 @@ bool GeEllipArc3d::isOn(const GePoint3d& pnt, const GeTol& tol) const
 	return ellip_is_param_on(*this, param, tol);
 }
 
-void GeEllipArc3d::getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* piece2) const
+void GeEllipArc3d::getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const
 {
+	piece1 = NULL;
+	piece2 = NULL;
 	GePointOnCurve3d pointOnCurve(*this, param);
 	GePoint3d point = pointOnCurve.point();
 	if (this->isOn(point) == false)
@@ -579,7 +879,10 @@ void GeEllipArc3d::getSplitCurves(double param, GeCurve3d* piece1, GeCurve3d* pi
 }
 bool GeEllipArc3d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const
 {
-	return false;
+	GeEllipArc3d* arc = new GeEllipArc3d(*this);
+	explodedCurves.append(arc);
+	newExplodedCurve.append(1);
+	return true;
 }
 GeBoundBlock3d GeEllipArc3d::boundBlock() const
 {
@@ -804,7 +1107,31 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GePoint3d& pnt, const GeVector3
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(pnt, tol);
+	}
+
+	GeLine3d line(pnt, projectDirection);
+	GePoint3dArray points = this->intersectWith(line, tol);
+	if (points.length() == 0)
+	{
+		return this->closestPointTo(pnt, tol);
+	}
+
+	GePoint3d closest = points[0];
+	double minDist = closest.distanceTo(pnt);
+	for (int i = 1; i < points.length(); i++)
+	{
+		double dist = points[i].distanceTo(pnt);
+		if (dist < minDist)
+		{
+			minDist = dist;
+			closest = points[i];
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -812,7 +1139,32 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVect
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
+	}
+
+	GePoint3d closest;
+	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+	if (points.length() == 0)
+	{
+		return closest;
+	}
+
+	double minDist = 0.0;
+	for (int i = 0; i < points.length(); i++)
+	{
+		GePoint3d other = curve3d.projClosestPointTo(points[i], -projectDirection, tol);
+		double dist = points[i].distanceTo(other);
+		if (i == 0 || dist < minDist)
+		{
+			minDist = dist;
+			closest = points[i];
+			pntOnOtherCrv = other;
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -820,7 +1172,32 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeV
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
+	}
+
+	GePoint3d closest;
+	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+	if (points.length() == 0)
+	{
+		return closest;
+	}
+
+	double minDist = 0.0;
+	for (int i = 0; i < points.length(); i++)
+	{
+		GePoint3d other = curve3d.projClosestPointTo(points[i], -projectDirection, tol);
+		double dist = points[i].distanceTo(other);
+		if (i == 0 || dist < minDist)
+		{
+			minDist = dist;
+			closest = points[i];
+			pntOnOtherCrv = other;
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -828,7 +1205,32 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVecto
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
+	}
+
+	GePoint3d closest;
+	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+	if (points.length() == 0)
+	{
+		return closest;
+	}
+
+	double minDist = 0.0;
+	for (int i = 0; i < points.length(); i++)
+	{
+		GePoint3d other = curve3d.projClosestPointTo(points[i], -projectDirection, tol);
+		double dist = points[i].distanceTo(other);
+		if (i == 0 || dist < minDist)
+		{
+			minDist = dist;
+			closest = points[i];
+			pntOnOtherCrv = other;
+		}
+	}
+
+	return closest;
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv) const
 {
@@ -836,7 +1238,7 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeV
 }
 GePoint3d GeEllipArc3d::projClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePoint3d& pntOnOtherCrv, const GeTol& tol) const
 {
-	return GePoint3d::kOrigin;
+	return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
 }
 void GeEllipArc3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnCrv) const
 {
@@ -844,6 +1246,9 @@ void GeEllipArc3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d&
 }
 void GeEllipArc3d::getProjClosestPointTo(const GePoint3d& pnt, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnCrv, const GeTol& tol) const
 {
+	GePoint3d point = this->projClosestPointTo(pnt, projectDirection, tol);
+	pntOnCrv.setCurve(*this);
+	pntOnCrv.setParameter(this->paramOf(point, tol));
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -851,6 +1256,12 @@ void GeEllipArc3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeLine3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -858,6 +1269,12 @@ void GeEllipArc3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVec
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeLineSeg3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -865,6 +1282,12 @@ void GeEllipArc3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeRay3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv) const
 {
@@ -872,6 +1295,12 @@ void GeEllipArc3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVec
 }
 void GeEllipArc3d::getProjClosestPointTo(const GeCircArc3d& curve3d, const GeVector3d& projectDirection, GePointOnCurve3d& pntOnThisCrv, GePointOnCurve3d& pntOnOtherCrv, const GeTol& tol) const
 {
+	GePoint3d pntOnOther;
+	GePoint3d pntOnThis = this->projClosestPointTo(curve3d, projectDirection, pntOnOther, tol);
+	pntOnThisCrv.setCurve(*this);
+	pntOnThisCrv.setParameter(this->paramOf(pntOnThis, tol));
+	pntOnOtherCrv.setCurve(curve3d);
+	pntOnOtherCrv.setParameter(curve3d.paramOf(pntOnOther, tol));
 }
 bool GeEllipArc3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCrv) const
 {
@@ -880,8 +1309,13 @@ bool GeEllipArc3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnC
 bool GeEllipArc3d::getNormalPoint(const GePoint3d& pnt, GePointOnCurve3d& pntOnCrv, const GeTol& tol) const
 {
 	GePoint3d closest = this->closestPointTo(pnt, tol);
+	double param = 0.0;
+	if (this->isOn(closest, param, tol) == false)
+	{
+		return false;
+	}
 	pntOnCrv.setCurve(*this);
-	pntOnCrv.setParameter(this->paramOf(closest, tol));
+	pntOnCrv.setParameter(param);
 	return true;
 }
 GeEllipArc3d* GeEllipArc3d::project(const GePlane& projectionPlane, const GeVector3d& projectDirection) const
@@ -890,7 +1324,23 @@ GeEllipArc3d* GeEllipArc3d::project(const GePlane& projectionPlane, const GeVect
 }
 GeEllipArc3d* GeEllipArc3d::project(const GePlane& projectionPlane, const GeVector3d& projectDirection, const GeTol& tol) const
 {
-	return NULL;
+	if (projectDirection.isZeroLength(tol) == true)
+	{
+		return NULL;
+	}
+	if (projectionPlane.normal().isParallelTo(this->normal(), tol.equalVector()) == false)
+	{
+		return NULL;
+	}
+	if (projectDirection.isPerpendicularTo(this->normal(), tol.equalVector()) == true)
+	{
+		return NULL;
+	}
+
+	GePoint3d center = this->center().project(projectionPlane, projectDirection);
+	GeEllipArc3d* arc = new GeEllipArc3d();
+	arc->set(center, this->normal(), this->majorAxis(), this->majorRadius(), this->minorRadius(), this->startAng(), this->endAng());
+	return arc;
 }
 GeEllipArc3d* GeEllipArc3d::orthoProject(const GePlane& projectionPlane) const
 {
@@ -898,7 +1348,7 @@ GeEllipArc3d* GeEllipArc3d::orthoProject(const GePlane& projectionPlane) const
 }
 GeEllipArc3d* GeEllipArc3d::orthoProject(const GePlane& projectionPlane, const GeTol& tol) const
 {
-	return NULL;
+	return this->project(projectionPlane, projectionPlane.normal(), tol);
 }
 bool GeEllipArc3d::isOn(const GePoint3d& pnt, double& param) const
 {

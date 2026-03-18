@@ -43,13 +43,19 @@ double GePointOnCurve2d::parameter() const {
 	return GE_IMP_POINTONCURVE2D(this->m_pImpl)->param;
 }
 
-GePoint2d GePointOnCurve2d::point() {
+GePoint2d GePointOnCurve2d::point() const {
+	if (this->curve() == nullptr) {
+		return GePoint2d::kOrigin;
+	}
 	return this->point(GE_IMP_POINTONCURVE2D(this->m_pImpl)->param);
 }
-GePoint2d GePointOnCurve2d::point(double param) {
+GePoint2d GePointOnCurve2d::point(double param) const {
+	if (this->curve() == nullptr) {
+		return GePoint2d::kOrigin;
+	}
 	return this->point(*GE_IMP_POINTONCURVE2D(this->m_pImpl)->pCurve, param);
 }
-GePoint2d GePointOnCurve2d::point(const GeCurve2d& crv, double param) {
+GePoint2d GePointOnCurve2d::point(const GeCurve2d& crv, double param) const {
 	GePoint2d point;
 
 	if (crv.type() == Ge::EntityId::kLineSeg2d) {
@@ -109,10 +115,9 @@ GePointOnCurve2d& GePointOnCurve2d::setParameter(double param) {
 
 
 bool GePointOnCurve2d::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
-		return true;
-	}
-	return false;
+	return entType == Ge::EntityId::kEntity2d
+		|| entType == Ge::EntityId::kPointEnt2d
+		|| entType == this->type();
 }
 Ge::EntityId GePointOnCurve2d::type() const {
 	return Ge::EntityId::kPointOnCurve2d;
@@ -164,14 +169,17 @@ bool GePointOnCurve2d::isOn(const GePoint2d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GePointOnCurve2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
-	return false;
+	if (this->curve() == nullptr) {
+		return false;
+	}
+	GePointOnCurve2d cur(*this);
+	return cur.point().isEqualTo(pnt, tol);
 }
 
 
 GePoint2d GePointOnCurve2d::point2d() const
 {
-	GePointOnCurve2d cur(*this);
-	return cur.point();
+	return this->point();
 }
 GePointOnCurve2d::operator GePoint2d () const {
 	return this->point2d();

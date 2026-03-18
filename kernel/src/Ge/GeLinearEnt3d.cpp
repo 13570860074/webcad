@@ -1,6 +1,8 @@
 #include "GeLinearEnt3d.h"
 #include "GeLine3d.h"
 #include "GeMatrix3d.h"
+#include "GePlane.h"
+#include "GePlanarEnt.h"
 #include "GeImpl.h"
 
 
@@ -56,39 +58,85 @@ bool GeLinearEnt3d::intersectWith(const GeLinearEnt3d& line, GePoint3d& intPnt) 
 }
 bool GeLinearEnt3d::intersectWith(const GeLinearEnt3d& line, GePoint3d& intPnt, const GeTol& tol) const
 {
-	return false;
+	GeLine3d thisLine;
+	GeLine3d otherLine;
+	this->getLine(thisLine);
+	line.getLine(otherLine);
+	if (thisLine.intersectWith(otherLine, intPnt, tol) == false)
+	{
+		return false;
+	}
+	return this->isOn(intPnt, tol) && line.isOn(intPnt, tol);
 }
 bool GeLinearEnt3d::intersectWith(const GePlanarEnt& plane, GePoint3d& intPnt) const {
 	return this->intersectWith(plane, intPnt, GeContext::gTol);
 }
 bool GeLinearEnt3d::intersectWith(const GePlanarEnt& plane, GePoint3d& intPnt, const GeTol& tol) const {
-	return false;
+	return plane.intersectWith(*this, intPnt, tol);
 }
 
 bool GeLinearEnt3d::projIntersectWith(const GeLinearEnt3d& line, const GeVector3d& projDir, GePoint3d& pntOnThisLine, GePoint3d& pntOnOtherLine) const {
 	return this->projIntersectWith(line, projDir, pntOnThisLine, pntOnOtherLine, GeContext::gTol);
 }
 bool GeLinearEnt3d::projIntersectWith(const GeLinearEnt3d& line, const GeVector3d& projDir, GePoint3d& pntOnThisLine, GePoint3d& pntOnOtherLine, const GeTol& tol) const {
-	return false;
+	if (this->intersectWith(line, pntOnThisLine, tol) == true)
+	{
+		pntOnOtherLine = pntOnThisLine;
+		return true;
+	}
+
+	if (projDir.isZeroLength(tol) == true)
+	{
+		return false;
+	}
+
+	GeVector3d thisDir = this->direction();
+	if (thisDir.isParallelTo(projDir, tol) == true)
+	{
+		return false;
+	}
+
+	GeVector3d planeNormal = thisDir.crossProduct(projDir);
+	if (planeNormal.isZeroLength(tol) == true)
+	{
+		return false;
+	}
+
+	GePlane projectionPlane(this->pointOnLine(), planeNormal);
+	if (projectionPlane.intersectWith(line, pntOnOtherLine, tol) == false)
+	{
+		return false;
+	}
+
+	GeLine3d thisLine;
+	this->getLine(thisLine);
+	GeLine3d projectionLine(pntOnOtherLine, projDir);
+	if (thisLine.intersectWith(projectionLine, pntOnThisLine, tol) == false)
+	{
+		return false;
+	}
+
+	return this->isOn(pntOnThisLine, tol) && line.isOn(pntOnOtherLine, tol);
 }
 
 bool GeLinearEnt3d::isOn(const GePoint3d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GeLinearEnt3d::isOn(const GePoint3d& pnt, const GeTol& tol) const {
-	return false;
+	GePoint3d projected = GeLinearEnt3d::vertical(pnt, *this, tol);
+	return projected.distanceTo(pnt) <= tol.equalPoint();
 }
 bool GeLinearEnt3d::isOn(double param) const {
 	return this->isOn(param, GeContext::gTol);
 }
 bool GeLinearEnt3d::isOn(double param, const GeTol& tol) const {
-	return false;
+	return true;
 }
 bool GeLinearEnt3d::isOn(const GePlane& plane) const {
 	return this->isOn(plane, GeContext::gTol);
 }
 bool GeLinearEnt3d::isOn(const GePlane& plane, const GeTol& tol) const {
-	return false;
+	return plane.isOn(this->pointOnLine(), tol) && this->isParallelTo(plane, tol);
 }
 
 bool GeLinearEnt3d::isParallelTo(const GeLinearEnt3d& line) const {
@@ -102,7 +150,7 @@ bool GeLinearEnt3d::isParallelTo(const GePlanarEnt& plane) const {
 	return this->isParallelTo(plane, GeContext::gTol);
 }
 bool GeLinearEnt3d::isParallelTo(const GePlanarEnt& plane, const GeTol& tol) const {
-	return false;
+	return this->direction().isPerpendicularTo(plane.normal(), tol);
 }
 
 bool GeLinearEnt3d::isPerpendicularTo(const GeLinearEnt3d& line) const {
@@ -121,7 +169,7 @@ bool GeLinearEnt3d::isPerpendicularTo(const GePlanarEnt& plane) const {
 	return this->isPerpendicularTo(plane, GeContext::gTol);
 }
 bool GeLinearEnt3d::isPerpendicularTo(const GePlanarEnt& plane, const GeTol& tol) const {
-	return false;
+	return this->direction().isParallelTo(plane.normal(), tol);
 }
 
 bool GeLinearEnt3d::isColinearTo(const GeLinearEnt3d& line) const {
@@ -129,19 +177,15 @@ bool GeLinearEnt3d::isColinearTo(const GeLinearEnt3d& line) const {
 }
 bool GeLinearEnt3d::isColinearTo(const GeLinearEnt3d& line, const GeTol& tol) const
 {
-	GeVector3d v1 = GE_IMP_LINEARENT3D(this->m_pImpl)->vector;
-	GeVector3d v2 = GE_IMP_LINEARENT3D(line.m_pImpl)->vector;
-	v1.normalize();
-	v2.normalize();
-	if (abs(v1.angleTo(v2)) < tol.equalVector() || abs(v1.angleTo(v2) - PI) < tol.equalVector())
+	if (this->isParallelTo(line, tol) == false)
 	{
 		return false;
 	}
-	return true;
+	return this->isOn(line.pointOnLine(), tol);
 }
 void GeLinearEnt3d::getPerpPlane(const GePoint3d& pnt, GePlane& plane) const
 {
-
+	plane.set(pnt, this->direction());
 }
 GePoint3d GeLinearEnt3d::pointOnLine() const
 {

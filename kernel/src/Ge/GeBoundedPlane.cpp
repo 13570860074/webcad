@@ -8,6 +8,43 @@
 #include "GeImpl.h"
 
 
+namespace {
+double bounded_plane_triple_product(const GeVector3d& vec1, const GeVector3d& vec2, const GeVector3d& vec3)
+{
+	return vec1.dotProduct(vec2.crossProduct(vec3));
+}
+
+bool bounded_plane_param_of(const GePoint3d& origin, const GeVector3d& xAxis, const GeVector3d& yAxis, const GeVector3d& normal, const GePoint3d& point, const GeTol& tol, GePoint2d& param)
+{
+	GeVector3d offset = point - origin;
+	double normalLength = normal.length();
+	if (normalLength <= tol.equalVector())
+	{
+		param.set(0.0, 0.0);
+		return false;
+	}
+
+	if (fabs(offset.dotProduct(normal)) > tol.equalPoint() * normalLength)
+	{
+		param.set(0.0, 0.0);
+		return false;
+	}
+
+	double denominator = normal.lengthSqrd();
+	if (denominator <= tol.equalVector() * tol.equalVector())
+	{
+		param.set(0.0, 0.0);
+		return false;
+	}
+
+	double u = bounded_plane_triple_product(offset, yAxis, normal) / denominator;
+	double v = bounded_plane_triple_product(xAxis, offset, normal) / denominator;
+	param.set(u, v);
+	return true;
+}
+}
+
+
 
 
 GeBoundedPlane::GeBoundedPlane() {
@@ -20,6 +57,7 @@ GeBoundedPlane::GeBoundedPlane(const GeBoundedPlane& src) {
 	GeVector3d xAxis, yAxis;
 	src.getCoordSystem(origin, xAxis, yAxis);
 	this->set(origin, xAxis, yAxis);
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->isNormalReversed;
 }
 GeBoundedPlane::GeBoundedPlane(const GePoint3d& pntU, const GePoint3d& org, const GePoint3d& pntV) {
 	GE_IMP_MEMORY_ENTITY(GeBoundedPlane);
@@ -35,7 +73,11 @@ bool GeBoundedPlane::intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& resul
 	return this->intersectWith(linEnt, resultPnt, GeContext::gTol);
 }
 bool GeBoundedPlane::intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& resultPnt, const GeTol& tol) const {
-	return false;
+	GePlane plane(this->pointOnPlane(), this->normal());
+	if (plane.intersectWith(linEnt, resultPnt, tol) == false) {
+		return false;
+	}
+	return this->isOn(resultPnt, tol);
 }
 bool GeBoundedPlane::intersectWith(const GePlane& otherPln, GeLineSeg3d& resultLine) const {
 	return this->intersectWith(otherPln, resultLine, GeContext::gTol);
@@ -112,13 +154,17 @@ GeBoundedPlane& GeBoundedPlane::operator = (const GeBoundedPlane& src) {
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->normal;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->xAxis;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->yAxis;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->isNormalReversed;
 	return *this;
 }
 
 
 
 bool GeBoundedPlane::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
+	if (entType == Ge::EntityId::kEntity3d
+		|| entType == Ge::EntityId::kSurface
+		|| entType == Ge::EntityId::kPlanarEnt
+		|| entType == this->type()) {
 		return true;
 	}
 	return false;
@@ -128,10 +174,11 @@ Ge::EntityId GeBoundedPlane::type() const {
 }
 GeBoundedPlane* GeBoundedPlane::copy() const {
 	GeBoundedPlane* pPlane = new GeBoundedPlane();
-	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->origin = GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->origin;
-	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->normal = GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->normal;
-	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->xAxis = GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->xAxis;
-	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->yAxis = GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->yAxis;
+	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->origin = GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin;
+	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->normal = GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal;
+	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->xAxis = GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis;
+	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->yAxis = GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis;
+	GE_IMP_BOUNDEDPLANE(pPlane->m_pImpl)->isNormalReversed = GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed;
 	return pPlane;
 }
 bool GeBoundedPlane::operator == (const GeBoundedPlane& entity) const {
@@ -203,13 +250,19 @@ GeBoundedPlane& GeBoundedPlane::rotateBy(double angle, const GeVector3d& vec, co
 	return *this;
 }
 GeBoundedPlane& GeBoundedPlane::mirror(const GePlane& plane) {
-	GePoint3d p1 = this->pointOnPlane();
-	GePoint3d p2 = p1 + this->normal();
-	p1.mirror(plane);
-	p2.mirror(plane);
+	GePoint3d origin = this->pointOnPlane();
+	GePoint3d xPoint = origin + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis;
+	GePoint3d yPoint = origin + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis;
+	GePoint3d zPoint = origin + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal;
+	origin.mirror(plane);
+	xPoint.mirror(plane);
+	yPoint.mirror(plane);
+	zPoint.mirror(plane);
 
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin = p1;
-	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = p2 - p1;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin = origin;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = xPoint - origin;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = yPoint - origin;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = zPoint - origin;
 
 	return *this;
 }
@@ -239,42 +292,14 @@ bool GeBoundedPlane::isOn(const GePoint3d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isOn(const GePoint3d& pnt, const GeTol& tol) const {
-
-	//判断点是否和平面原点重合
-	if (this->pointOnPlane().isEqualTo(pnt, tol) == true) {
-		return true;
-	}
-
-	//判断向量是否和平面法向垂直如垂直则在平面上
-	GeVector3d vec = pnt - this->pointOnPlane();
-	if (vec.isPerpendicularTo(this->normal()) == false) {
+	GePoint2d paramPoint;
+	if (bounded_plane_param_of(this->pointOnPlane(), GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis, this->normal(), pnt, tol, paramPoint) == false) {
 		return false;
 	}
-
-	GePoint3dArray points;
-	points.append(this->pointOnPlane());
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane());
-
-	GeRay3d ray;
-	ray.set(pnt, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis);
-
-	int num = 0;
-	for (int i = 1; i < points.length(); i++) {
-		GeLineSeg3d lineSeg;
-		lineSeg.set(points[i - 1], points[i]);
-
-		GePoint3d intersect;
-		if (ray.intersectWith(lineSeg, intersect, tol) == true) {
-			num++;
-		}
-	}
-	if (num % 2 == 0) {
-		return false;
-	}
-	return true;
+	return paramPoint.x >= -tol.equalPoint() &&
+		paramPoint.x <= 1.0 + tol.equalPoint() &&
+		paramPoint.y >= -tol.equalPoint() &&
+		paramPoint.y <= 1.0 + tol.equalPoint();
 }
 
 
@@ -283,29 +308,19 @@ GePoint2d GeBoundedPlane::paramOf(const GePoint3d& pnt) const {
 	return this->paramOf(pnt, GeContext::gTol);
 }
 GePoint2d GeBoundedPlane::paramOf(const GePoint3d& pnt, const GeTol& tol) const {
-
-	//获得坐标系
-	GePoint3d origin;
-	GeVector3d xAxis, yAxis;
-	this->getCoordSystem(origin, xAxis, yAxis);
-	yAxis = xAxis.crossProduct(this->normal()).normal();
-
-	//获得矩阵
-	GeMatrix3d mat;
-	mat.setToAlignCoordSys(this->pointOnPlane(), xAxis, yAxis, this->normal(),
-		GePoint3d::kOrigin, GeVector3d::kXAxis, GeVector3d::kYAxis, GeVector3d::kZAxis);
-
-	GePoint3d point = pnt;
-	point.transformBy(mat);
-
-	return GePoint2d(point.x, point.y);
+	GePoint2d param;
+	bounded_plane_param_of(this->pointOnPlane(), GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis, this->normal(), pnt, tol, param);
+	return param;
 }
 bool GeBoundedPlane::isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const {
 	return this->isOn(pnt, paramPoint, GeContext::gTol);
 } 
 bool GeBoundedPlane::isOn(const GePoint3d& pnt, GePoint2d& paramPoint, const GeTol& tol) const {
-	paramPoint = this->paramOf(pnt);
-	if (this->isOn(pnt, tol) == false) {
+	if (bounded_plane_param_of(this->pointOnPlane(), GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis, this->normal(), pnt, tol, paramPoint) == false) {
+		return false;
+	}
+	if (paramPoint.x < -tol.equalPoint() || paramPoint.x > 1.0 + tol.equalPoint() ||
+		paramPoint.y < -tol.equalPoint() || paramPoint.y > 1.0 + tol.equalPoint()) {
 		return false;
 	}
 	return true;
@@ -365,23 +380,23 @@ double GeBoundedPlane::distanceTo(const GePoint3d& pnt, const GeTol& tol) const 
 	return closest.distanceTo(pnt);
 }
 bool GeBoundedPlane::isNormalReversed() const {
-	return GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed;
+	return this->isLeftHanded();
+}
+bool GeBoundedPlane::isLeftHanded() const {
+	return GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis).dotProduct(GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal) < 0.0;
 }
 GeSurface& GeBoundedPlane::reverseNormal() {
-	if (GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed == false) {
-		GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = true;
-	}
-	else {
-		GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = false;
-	}
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal.negate();
 	return *this;
 }
+void GeBoundedPlane::getEnvelope(GeInterval& rangeU, GeInterval& rangeV) const {
+	rangeU.set(0.0, 1.0);
+	rangeV.set(0.0, 1.0);
+}
 GePoint3d GeBoundedPlane::evalPoint(const GePoint2d& param) const {
-	GePointOnSurface surface;
-	surface.setSurface(*this);
-	surface.setParameter(param);
-	return surface.point();
+	return this->pointOnPlane()
+		+ GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis * param.x
+		+ GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis * param.y;
 }
 
 
@@ -633,6 +648,11 @@ GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln
 GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln, GePoint3d& pointOnOtherPln, const GeTol& tol) const {
 
 	GePoint3d closest;
+	GeLineSeg3d intersectLine;
+	if (this->intersectWith(otherPln, intersectLine, tol) == true) {
+		pointOnOtherPln = intersectLine.startPoint();
+		return intersectLine.startPoint();
+	}
 
 	GePoint3dArray points1;
 	points1.append(this->pointOnPlane());
@@ -656,7 +676,7 @@ GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln
 
 		for (int u = 1; u < points2.length(); u++) {
 
-			GeLineSeg3d lineSegOtherf(points1[u - 1], points1[u]);
+			GeLineSeg3d lineSegOtherf(points2[u - 1], points2[u]);
 
 			//获得两线段最近点
 			GePoint3d pntOnOtherCrv;
@@ -729,25 +749,25 @@ bool GeBoundedPlane::isParallelTo(const GeBoundedPlane& otherPlnEnt, const GeTol
 	return true;
 }
 bool GeBoundedPlane::isPerpendicularTo(const GeLine3d& linEnt) const{
-	return this->isParallelTo(linEnt, GeContext::gTol);
+	return this->isPerpendicularTo(linEnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GeLine3d& linEnt, const GeTol& tol) const{
 	return linEnt.direction().isParallelTo(this->normal(), tol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GeLineSeg3d& linEnt) const{
-	return this->isParallelTo(linEnt, GeContext::gTol);
+	return this->isPerpendicularTo(linEnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GeLineSeg3d& linEnt, const GeTol& tol) const{
 	return linEnt.direction().isParallelTo(this->normal(), tol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GeRay3d& linEnt) const{
-	return this->isParallelTo(linEnt, GeContext::gTol);
+	return this->isPerpendicularTo(linEnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GeRay3d& linEnt, const GeTol& tol) const{
 	return linEnt.direction().isParallelTo(this->normal(), tol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GePlane& otherPlnEnt) const{
-	return this->isParallelTo(otherPlnEnt, GeContext::gTol);
+	return this->isPerpendicularTo(otherPlnEnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isPerpendicularTo(const GePlane& otherPlnEnt, const GeTol& tol) const{
 	return otherPlnEnt.normal().isPerpendicularTo(this->normal(), tol);
@@ -759,7 +779,7 @@ bool GeBoundedPlane::isPerpendicularTo(const GeBoundedPlane& otherPlnEnt, const 
 	return otherPlnEnt.normal().isPerpendicularTo(this->normal(), tol);
 }
 bool GeBoundedPlane::isCoplanarTo(const GePlane& otherPlnEnt) const{
-	return this->isParallelTo(otherPlnEnt, GeContext::gTol);
+	return this->isCoplanarTo(otherPlnEnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isCoplanarTo(const GePlane& otherPlnEnt, const GeTol& tol) const {
 	if (this->isParallelTo(otherPlnEnt, tol) == false) {
@@ -771,7 +791,7 @@ bool GeBoundedPlane::isCoplanarTo(const GePlane& otherPlnEnt, const GeTol& tol) 
 	return true;
 }
 bool GeBoundedPlane::isCoplanarTo(const GeBoundedPlane& otherPlnEnt) const {
-	return this->isParallelTo(otherPlnEnt, GeContext::gTol);
+	return this->isCoplanarTo(otherPlnEnt, GeContext::gTol);
 }
 bool GeBoundedPlane::isCoplanarTo(const GeBoundedPlane& otherPlnEnt, const GeTol& tol) const {
 	if (this->isParallelTo(otherPlnEnt, tol) == false) {

@@ -8,11 +8,30 @@
 #include "GeBoundBlock2d.h"
 #include "GeImpl.h"
 
+namespace {
+void selectClosestPair(const GePoint2dArray& pointItselfs, const GePoint2dArray& pointOthers, GePoint2d& closest, GePoint2d& pntOnOtherCrv)
+{
+	int pairCount = pointItselfs.length();
+	if (pointOthers.length() < pairCount) {
+		pairCount = pointOthers.length();
+	}
+	for (int i = 0; i < pairCount; ++i) {
+		double dist = pointItselfs[i].distanceTo(pointOthers[i]);
+		if (i == 0 || dist < closest.distanceTo(pntOnOtherCrv)) {
+			closest.set(pointItselfs[i].x, pointItselfs[i].y);
+			pntOnOtherCrv.set(pointOthers[i].x, pointOthers[i].y);
+		}
+	}
+}
+}
+
 
 
 GeRay2d::GeRay2d()
 {
 	GE_IMP_MEMORY_ENTITY(GeRay2d);
+
+	this->set(GePoint2d::kOrigin, GeVector2d::kXAxis);
 }
 GeRay2d::GeRay2d(const GeRay2d& line)
 {
@@ -50,10 +69,20 @@ GeRay2d& GeRay2d::operator =(const GeRay2d& line)
 	return *this;
 }
 
+void GeRay2d::getInterval(GeInterval& range) const {
+	range.set(true, 0.0);
+}
+
+void GeRay2d::getInterval(GeInterval& range, GePoint2d& startPoint, GePoint2d& endPoint) const {
+	range.set(true, 0.0);
+	startPoint = this->pointOnLine();
+	endPoint = this->pointOnLine() + this->direction() * this->length();
+}
+
 
 
 bool GeRay2d::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
+	if (entType == Ge::EntityId::kEntity2d || entType == Ge::EntityId::kCurve2d || entType == Ge::EntityId::kLinearEnt2d || entType == this->type()) {
 		return true;
 	}
 	return false;
@@ -79,7 +108,7 @@ bool GeRay2d::isEqualTo(const GeRay2d& entity, const GeTol& tol) const {
 	if (this->pointOnLine().isEqualTo(entity.pointOnLine(), tol) == false) {
 		return false;
 	}
-	if (this->direction().isEqualTo(entity.direction(), tol) == false) {
+	if (this->direction().isCodirectionalTo(entity.direction(), tol) == false) {
 		return false;
 	}
 	return true;
@@ -130,11 +159,14 @@ bool GeRay2d::isOn(const GePoint2d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GeRay2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
-	GeVector2d v1 = pnt - this->pointOnLine();
-	GeVector2d v2 = this->direction();
-	v1.normalize();
-	v2.normalize();
-	if (v1.isEqualTo(v2, tol) == false)
+	GePoint2d projected = GeLinearEnt2d::vertical(pnt, *this, tol);
+	if (projected.distanceTo(pnt) > tol.equalPoint())
+	{
+		return false;
+	}
+
+	GeVector2d offset = pnt - this->pointOnLine();
+	if (offset.dotProduct(this->direction()) < -tol.equalPoint())
 	{
 		return false;
 	}
@@ -215,7 +247,7 @@ GePoint2d GeRay2d::closestPointTo(const GePoint2d& pnt) const {
 }
 GePoint2d GeRay2d::closestPointTo(const GePoint2d& pnt, const GeTol& tol) const {
 	GePoint2d point = GeRay2d::vertical(pnt, *this, tol);
-	if (this->isOn(point) == true) {
+	if (this->isOn(point, tol) == true) {
 		return point;
 	}
 	return this->pointOnLine();
@@ -239,24 +271,7 @@ GePoint2d GeRay2d::closestPointTo(const GeLine2d& curve2d, GePoint2d& pntOnOther
 		pointItselfs.append(this->pointOnLine());
 		pointOthers.append(curve2d.closestPointTo(this->pointOnLine(), tol));
 
-		double minDist = 0.0;
-		for (int i = 0; i < pointItselfs.length(); i++) {
-			for (int u = 0; u < pointOthers.length(); u++) {
-				double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-				if (i == 0 && u == 0) {
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-					continue;
-				}
-				if (dist < minDist)
-				{
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-				}
-			}
-		}
+		selectClosestPair(pointItselfs, pointOthers, closest, pntOnOtherCrv);
 
 	} while (false);
 
@@ -285,24 +300,7 @@ GePoint2d GeRay2d::closestPointTo(const GeLineSeg2d& curve2d, GePoint2d& pntOnOt
 		pointItselfs.append(this->pointOnLine());
 		pointOthers.append(curve2d.closestPointTo(this->pointOnLine(), tol));
 
-		double minDist = 0.0;
-		for (int i = 0; i < pointItselfs.length(); i++) {
-			for (int u = 0; u < pointOthers.length(); u++) {
-				double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-				if (i == 0 && u == 0) {
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-					continue;
-				}
-				if (dist < minDist)
-				{
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-				}
-			}
-		}
+		selectClosestPair(pointItselfs, pointOthers, closest, pntOnOtherCrv);
 
 	} while (false);
 
@@ -329,24 +327,7 @@ GePoint2d GeRay2d::closestPointTo(const GeRay2d& curve2d, GePoint2d& pntOnOtherC
 		pointItselfs.append(this->pointOnLine());
 		pointOthers.append(curve2d.closestPointTo(this->pointOnLine(), tol));
 
-		double minDist = 0.0;
-		for (int i = 0; i < pointItselfs.length(); i++) {
-			for (int u = 0; u < pointOthers.length(); u++) {
-				double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-				if (i == 0 && u == 0) {
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-					continue;
-				}
-				if (dist < minDist)
-				{
-					minDist = dist;
-					closest.set(pointItselfs[i].x, pointItselfs[i].y);
-					pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-				}
-			}
-		}
+		selectClosestPair(pointItselfs, pointOthers, closest, pntOnOtherCrv);
 
 	} while (false);
 
@@ -416,27 +397,18 @@ double GeRay2d::paramOf(const GePoint2d& pnt) const {
 	return this->paramOf(pnt, GeContext::gTol);
 }
 double GeRay2d::paramOf(const GePoint2d& pnt, const GeTol& tol) const {
+	if (this->isOn(pnt, tol) == false) {
+		return 0.0;
+	}
 
-	double param = 0.0;
+	GeVector2d axis = GE_IMP_RAY2D(this->m_pImpl)->vector;
+	double lengthSqrd = axis.lengthSqrd();
+	if (lengthSqrd <= tol.equalPoint() * tol.equalPoint()) {
+		return 0.0;
+	}
 
-	do
-	{
-		GeLine2d line(this->pointOnLine(), this->direction());
-		if (line.isOn(pnt, tol) == false) {
-			break;
-		}
-
-		GeVector2d direction = pnt - this->pointOnLine();
-		direction.normalize();
-		if (direction.isEqualTo(this->direction(), tol) == true) {
-			param = (pnt.distanceTo(this->pointOnLine())) / this->length();
-		}
-		else {
-			param = 0 - (pnt.distanceTo(this->pointOnLine())) / this->length();
-		}
-	} while (false);
-
-	return param;
+	GeVector2d offset = pnt - this->pointOnLine();
+	return offset.dotProduct(axis) / lengthSqrd;
 }
 void GeRay2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCurveList) const {
 	return this->getTrimmedOffset(distance, offsetCurveList, Ge::OffsetCrvExtType::kExtend);
@@ -464,7 +436,9 @@ bool GeRay2d::isClosed() const {
 bool GeRay2d::isClosed(const GeTol& tol) const {
 	return false;
 }
-void GeRay2d::getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* piece2) const {
+void GeRay2d::getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const {
+	piece1 = NULL;
+	piece2 = NULL;
 	GePointOnCurve2d pointOnCurve(*this, param);
 	GePoint2d point = pointOnCurve.point();
 	if (this->isOn(point) == false) {
@@ -474,11 +448,17 @@ void GeRay2d::getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* piece2)
 	piece2 = new GeRay2d(point, this->direction());
 }
 bool GeRay2d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const {
-	return false;
+	GeRay2d* line = new GeRay2d(*this);
+	explodedCurves.append(line);
+	newExplodedCurve.append(1);
+	return true;
 }
 GeBoundBlock2d GeRay2d::boundBlock() const {
 	GeInterval range;
-	range.set(this->paramOf(this->pointOnLine()), this->paramOf(this->pointOnLine() + this->direction() * this->length()));
+	this->getInterval(range);
+	if (range.isBoundedBelow() == false || range.isBoundedAbove() == false) {
+		range.set(this->paramOf(this->pointOnLine()), this->paramOf(this->pointOnLine() + this->direction() * this->length()));
+	}
 	return this->boundBlock(range);
 }
 GeBoundBlock2d GeRay2d::boundBlock(const GeInterval& range) const {
@@ -497,7 +477,10 @@ GeBoundBlock2d GeRay2d::boundBlock(const GeInterval& range) const {
 }
 GeBoundBlock2d GeRay2d::orthoBoundBlock() const {
 	GeInterval range;
-	range.set(this->paramOf(this->pointOnLine()), this->paramOf(this->pointOnLine() + this->direction() * this->length()));
+	this->getInterval(range);
+	if (range.isBoundedBelow() == false || range.isBoundedAbove() == false) {
+		range.set(this->paramOf(this->pointOnLine()), this->paramOf(this->pointOnLine() + this->direction() * this->length()));
+	}
 	return this->orthoBoundBlock(range);
 }
 GeBoundBlock2d GeRay2d::orthoBoundBlock(const GeInterval& range) const {
@@ -535,18 +518,16 @@ GeBoundBlock2d GeRay2d::orthoBoundBlock(const GeInterval& range) const {
 	return boundBlock;
 }
 bool GeRay2d::hasStartPoint(GePoint2d& startPoint) const {
-	GePointOnCurve2d pointOnCurve;
-	pointOnCurve.setCurve(*this);
-	pointOnCurve.setParameter(0.0);
-	startPoint = pointOnCurve.point();
-	return true;
+	GeInterval range;
+	GePoint2d endPoint;
+	this->getInterval(range, startPoint, endPoint);
+	return range.isBoundedBelow();
 }
 bool GeRay2d::hasEndPoint(GePoint2d& endPoint) const {
-	GePointOnCurve2d pointOnCurve;
-	pointOnCurve.setCurve(*this);
-	pointOnCurve.setParameter(1.0);
-	endPoint = pointOnCurve.point();
-	return false;
+	GeInterval range;
+	GePoint2d startPoint;
+	this->getInterval(range, startPoint, endPoint);
+	return range.isBoundedAbove();
 }
 
 

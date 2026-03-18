@@ -307,7 +307,7 @@ bool GeCircArc2d::isInside(const GePoint2d& pnt) const {
 }
 bool GeCircArc2d::isInside(const GePoint2d& pnt, const GeTol& tol) const {
 	double dist = this->center().distanceTo(pnt);
-	if (dist > this->radius() + this->radius()) {
+	if (dist > this->radius() + tol.equalPoint()) {
 		return false;
 	}
 	return true;
@@ -457,7 +457,7 @@ GeCircArc2d& GeCircArc2d::operator = (const GeCircArc2d& arc) {
 
 
 bool GeCircArc2d::isKindOf(Ge::EntityId entType) const {
-	if (entType == this->type()) {
+	if (entType == Ge::kEntity2d || entType == Ge::kCurve2d || entType == this->type()) {
 		return true;
 	}
 	return false;
@@ -510,7 +510,7 @@ GeCircArc2d& GeCircArc2d::transformBy(const GeMatrix2d& xfm) {
 
 	GePoint2d center = this->center();
 	GePoint2d startPoint = this->startPoint();
-	GePoint2d endPoint = this->startPoint();
+	GePoint2d endPoint = this->endPoint();
 	center.transformBy(xfm);
 	startPoint.transformBy(xfm);
 	endPoint.transformBy(xfm);
@@ -538,9 +538,9 @@ GeCircArc2d& GeCircArc2d::rotateBy(double angle) {
 	return this->rotateBy(angle, GePoint2d::kOrigin);
 }
 GeCircArc2d& GeCircArc2d::rotateBy(double angle, const GePoint2d& wrtPoint) {
-	GePoint2d center = this->center();
-	center.rotateBy(angle, wrtPoint);
-	this->setAngles(this->startAng() + angle, this->endAng() + angle);
+	GeMatrix2d mat;
+	mat.setToRotation(angle, wrtPoint);
+	this->transformBy(mat);
 	return *this;
 }
 GeCircArc2d& GeCircArc2d::mirror(const GeLine2d& line) {
@@ -618,7 +618,9 @@ bool GeCircArc2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
 
 	return isValue;
 }
-void GeCircArc2d::getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* piece2) const {
+void GeCircArc2d::getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const {
+	piece1 = NULL;
+	piece2 = NULL;
 
 	GePointOnCurve2d pointOnCurve(*this, param);
 	GePoint2d point = pointOnCurve.point();
@@ -633,7 +635,10 @@ void GeCircArc2d::getSplitCurves(double param, GeCurve2d* piece1, GeCurve2d* pie
 	piece2 = new GeCircArc2d(this->center(), this->radius(), angle, this->endAng(), this->refVec(), this->isClockWise());
 }
 bool GeCircArc2d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const {
-	return false;
+	GeCircArc2d* arc = new GeCircArc2d(*this);
+	explodedCurves.append(arc);
+	newExplodedCurve.append(1);
+	return true;
 }
 GeBoundBlock2d GeCircArc2d::boundBlock() const {
 	GeInterval range;
@@ -808,7 +813,7 @@ double GeCircArc2d::paramAtLength(double datumParam, double length, double tol) 
 
 	param = datumParam + (length / (2 * PI * this->radius()) * (2 * PI));
 	if (param > PI * 2) {
-		param = param - int(param / PI * 2) * PI * 2;
+		param = param - int(param / (PI * 2)) * PI * 2;
 	}
 	return param;
 }
