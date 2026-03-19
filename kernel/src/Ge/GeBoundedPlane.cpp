@@ -42,6 +42,31 @@ bool bounded_plane_param_of(const GePoint3d& origin, const GeVector3d& xAxis, co
 	param.set(u, v);
 	return true;
 }
+
+void bounded_plane_select_closest_pair(const GePoint3dArray& pointsOnThis, const GePoint3dArray& pointsOnOther, GePoint3d& closest, GePoint3d& pointOnOther)
+{
+	int pairCount = pointsOnThis.length();
+	if (pointsOnOther.length() < pairCount) {
+		pairCount = pointsOnOther.length();
+	}
+	for (int i = 0; i < pairCount; ++i) {
+		double dist = pointsOnThis[i].distanceTo(pointsOnOther[i]);
+		if (i == 0 || dist < closest.distanceTo(pointOnOther)) {
+			closest = pointsOnThis[i];
+			pointOnOther = pointsOnOther[i];
+		}
+	}
+}
+
+void bounded_plane_get_loop_points(const GePoint3d& origin, const GeVector3d& xAxis, const GeVector3d& yAxis, GePoint3dArray& points)
+{
+	points.append(origin);
+	points.append(origin + xAxis);
+	points.append(origin + xAxis + yAxis);
+	points.append(origin + yAxis);
+	points.append(origin);
+}
+
 }
 
 
@@ -49,14 +74,18 @@ bool bounded_plane_param_of(const GePoint3d& origin, const GeVector3d& xAxis, co
 
 GeBoundedPlane::GeBoundedPlane() {
 	GE_IMP_MEMORY_ENTITY(GeBoundedPlane);
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin = GePoint3d::kOrigin;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = GeVector3d::kXAxis;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = GeVector3d::kYAxis;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = GeVector3d::kZAxis;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = false;
 }
 GeBoundedPlane::GeBoundedPlane(const GeBoundedPlane& src) {
 	GE_IMP_MEMORY_ENTITY(GeBoundedPlane);
-
-	GePoint3d origin;
-	GeVector3d xAxis, yAxis;
-	src.getCoordSystem(origin, xAxis, yAxis);
-	this->set(origin, xAxis, yAxis);
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->origin = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->origin;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->normal;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->xAxis;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->yAxis;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = GE_IMP_BOUNDEDPLANE(src.m_pImpl)->isNormalReversed;
 }
 GeBoundedPlane::GeBoundedPlane(const GePoint3d& pntU, const GePoint3d& org, const GePoint3d& pntV) {
@@ -105,23 +134,46 @@ bool GeBoundedPlane::intersectWith(const GeBoundedPlane& bndPln, GeLineSeg3d& re
 	}
 
 	GePoint3dArray linePoints;
-	if (this->isOn(lineSeg1.startPoint(), tol) == true) {
-		linePoints.append(lineSeg1.startPoint());
-	}
-	if (this->isOn(lineSeg1.endPoint(), tol) == true) {
-		linePoints.append(lineSeg1.endPoint());
-	}
-	if (this->isOn(lineSeg2.startPoint(), tol) == true) {
-		linePoints.append(lineSeg2.startPoint());
-	}
-	if (this->isOn(lineSeg2.endPoint(), tol) == true) {
-		linePoints.append(lineSeg2.endPoint());
+	GePoint3d candidates[4] = {
+		lineSeg1.startPoint(),
+		lineSeg1.endPoint(),
+		lineSeg2.startPoint(),
+		lineSeg2.endPoint()
+	};
+	for (int i = 0; i < 4; ++i) {
+		if (this->isOn(candidates[i], tol) == false || bndPln.isOn(candidates[i], tol) == false) {
+			continue;
+		}
+		bool isUnique = true;
+		for (int u = 0; u < linePoints.length(); ++u) {
+			if (linePoints[u].isEqualTo(candidates[i], tol)) {
+				isUnique = false;
+				break;
+			}
+		}
+		if (isUnique) {
+			linePoints.append(candidates[i]);
+		}
 	}
 
 	if (linePoints.length() < 2) {
 		return false;
 	}
-	resultLineSeg.set(linePoints[0], linePoints[1]);
+
+	int firstIndex = 0;
+	int secondIndex = 1;
+	double maxDistance = linePoints[0].distanceTo(linePoints[1]);
+	for (int i = 0; i < linePoints.length(); ++i) {
+		for (int u = i + 1; u < linePoints.length(); ++u) {
+			double dist = linePoints[i].distanceTo(linePoints[u]);
+			if (dist > maxDistance) {
+				maxDistance = dist;
+				firstIndex = i;
+				secondIndex = u;
+			}
+		}
+	}
+	resultLineSeg.set(linePoints[firstIndex], linePoints[secondIndex]);
 	return true;
 }
 GeBoundedPlane& GeBoundedPlane::set(const GePoint3d& pntU, const GePoint3d& org, const GePoint3d& pntV) {
@@ -136,6 +188,7 @@ GeBoundedPlane& GeBoundedPlane::set(const GePoint3d& pntU, const GePoint3d& org,
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = v1;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = v2;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = normal;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = false;
 	return *this;
 }
 GeBoundedPlane& GeBoundedPlane::set(const GePoint3d& org, const GeVector3d& uAxis, const GeVector3d& vAxis) {
@@ -147,6 +200,7 @@ GeBoundedPlane& GeBoundedPlane::set(const GePoint3d& org, const GeVector3d& uAxi
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis = uAxis;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis = vAxis;
 	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->normal = normal;
+	GE_IMP_BOUNDEDPLANE(this->m_pImpl)->isNormalReversed = false;
 	return *this;
 }
 GeBoundedPlane& GeBoundedPlane::operator = (const GeBoundedPlane& src) {
@@ -343,8 +397,8 @@ GePoint3d GeBoundedPlane::closestPointTo(const GePoint3d& pnt, const GeTol& tol)
 	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
 	points.append(this->pointOnPlane());
 
-	GePoint3d closest;
-	double minDist = 0.0;
+	GePoint3d closest = points[0];
+	double minDist = -1.0;
 	for (int i = 1; i < points.length(); i++) {
 		GeLineSeg3d lineSeg;
 		lineSeg.set(points[i - 1], points[i]);
@@ -355,7 +409,7 @@ GePoint3d GeBoundedPlane::closestPointTo(const GePoint3d& pnt, const GeTol& tol)
 		//获得距离
 		double dist = point.distanceTo(pnt);
 
-		if (dist < tol.equalPoint() || dist < minDist) {
+		if (minDist < 0.0 || dist < tol.equalPoint() || dist < minDist) {
 			closest = point;
 			minDist = dist;
 		}
@@ -481,13 +535,6 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeLine3d& line, GePoint3
 
 	GePoint3d closest;
 
-	//判断是否平行,如果平行则计算点到平面的距离
-	if (this->isParallelTo(line, tol) == true) {
-		closest.set(this->pointOnPlane().x, this->pointOnPlane().y, this->pointOnPlane().z);
-		pointOnLine = GeLine3d::vertical(closest, line);
-		return closest;
-	}
-
 	//判断平面和直线是否相交
 	GePoint3d intersect;
 	if (this->intersectWith(line, intersect, tol) == true) {
@@ -500,11 +547,7 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeLine3d& line, GePoint3
 
 	//获得平面的四个边界和直线的最近点
 	GePoint3dArray points;
-	points.append(this->pointOnPlane());
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane());
+	bounded_plane_get_loop_points(this->pointOnPlane(), GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis, points);
 	for (int i = 1; i < points.length(); i++) {
 
 		GeLineSeg3d lineSeg(points[i - 1], points[i]);
@@ -515,17 +558,7 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeLine3d& line, GePoint3
 		pointOthers.append(pntOnOtherCrv);
 		pointItselfs.append(point);
 	}
-
-	//获得最近点
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		double dist = pointItselfs[i].distanceTo(pointOthers[i]);
-		if (i == 0 || dist < minDist) {
-			minDist = dist;
-			closest = pointItselfs[i];
-			pointOnLine = pointOthers[i];
-		}
-	}
+	bounded_plane_select_closest_pair(pointItselfs, pointOthers, closest, pointOnLine);
 
 	return closest;
 }
@@ -546,20 +579,9 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeLineSeg3d& line, GePoi
 
 	GePoint3dArray pointItselfs, pointOthers;
 
-	//获得起点和端点的最近点
-	pointOthers.append(line.startPoint());
-	pointItselfs.append(this->closestPointTo(line.startPoint(), tol));
-
-	pointOthers.append(line.endPoint());
-	pointItselfs.append(this->closestPointTo(line.endPoint(), tol));
-
 	//获得平面的四个边界和直线的最近点
 	GePoint3dArray points;
-	points.append(this->pointOnPlane());
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane());
+	bounded_plane_get_loop_points(this->pointOnPlane(), GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis, points);
 	for (int i = 1; i < points.length(); i++) {
 
 		GeLineSeg3d lineSeg(points[i - 1], points[i]);
@@ -570,17 +592,7 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeLineSeg3d& line, GePoi
 		pointOthers.append(pntOnOtherCrv);
 		pointItselfs.append(point);
 	}
-
-	//获得最近点
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		double dist = pointItselfs[i].distanceTo(pointOthers[i]);
-		if (i == 0 || dist < minDist) {
-			minDist = dist;
-			closest = pointItselfs[i];
-			pointOnLine = pointOthers[i];
-		}
-	}
+	bounded_plane_select_closest_pair(pointItselfs, pointOthers, closest, pointOnLine);
 
 	return closest;
 }
@@ -601,16 +613,9 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeRay3d& line, GePoint3d
 
 	GePoint3dArray pointItselfs, pointOthers;
 
-	pointOthers.append(line.pointOnLine());
-	pointItselfs.append(this->closestPointTo(line.pointOnLine(), tol));
-
 	//获得平面的四个边界和直线的最近点
 	GePoint3dArray points;
-	points.append(this->pointOnPlane());
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane() + GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis);
-	points.append(this->pointOnPlane());
+	bounded_plane_get_loop_points(this->pointOnPlane(), GE_IMP_BOUNDEDPLANE(this->m_pImpl)->xAxis, GE_IMP_BOUNDEDPLANE(this->m_pImpl)->yAxis, points);
 	for (int i = 1; i < points.length(); i++) {
 
 		GeLineSeg3d lineSeg(points[i - 1], points[i]);
@@ -621,17 +626,7 @@ GePoint3d GeBoundedPlane::closestPointToLinearEnt(const GeRay3d& line, GePoint3d
 		pointOthers.append(pntOnOtherCrv);
 		pointItselfs.append(point);
 	}
-
-	//获得最近点
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		double dist = pointItselfs[i].distanceTo(pointOthers[i]);
-		if (i == 0 || dist < minDist) {
-			minDist = dist;
-			closest = pointItselfs[i];
-			pointOnLine = pointOthers[i];
-		}
-	}
+	bounded_plane_select_closest_pair(pointItselfs, pointOthers, closest, pointOnLine);
 
 	return closest;
 }
@@ -639,8 +634,9 @@ GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GePlane& otherPln, GePoi
 	return this->closestPointToPlanarEnt(otherPln, pointOnOtherPln, GeContext::gTol);
 }
 GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GePlane& otherPln, GePoint3d& pointOnOtherPln, const GeTol& tol) const {
-	GePoint3d closest = otherPln.closestPointToPlanarEnt(*this, pointOnOtherPln, tol);
-	return closest;
+	GePoint3d pointOnThis;
+	pointOnOtherPln = otherPln.closestPointToPlanarEnt(*this, pointOnThis, tol);
+	return pointOnThis;
 }
 GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln, GePoint3d& pointOnOtherPln) const {
 	return this->closestPointToPlanarEnt(otherPln, pointOnOtherPln, GeContext::gTol);
@@ -650,8 +646,8 @@ GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln
 	GePoint3d closest;
 	GeLineSeg3d intersectLine;
 	if (this->intersectWith(otherPln, intersectLine, tol) == true) {
-		pointOnOtherPln = intersectLine.startPoint();
-		return intersectLine.startPoint();
+		pointOnOtherPln = intersectLine.midPoint();
+		return pointOnOtherPln;
 	}
 
 	GePoint3dArray points1;
@@ -674,6 +670,12 @@ GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln
 		
 		GeLineSeg3d lineSegItself(points1[i - 1], points1[i]);
 
+		pointItselfs.append(lineSegItself.startPoint());
+		pointOthers.append(otherPln.closestPointTo(lineSegItself.startPoint(), tol));
+
+		pointItselfs.append(lineSegItself.endPoint());
+		pointOthers.append(otherPln.closestPointTo(lineSegItself.endPoint(), tol));
+
 		for (int u = 1; u < points2.length(); u++) {
 
 			GeLineSeg3d lineSegOtherf(points2[u - 1], points2[u]);
@@ -684,31 +686,19 @@ GePoint3d GeBoundedPlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln
 
 			pointItselfs.append(point);
 			pointOthers.append(pntOnOtherCrv);
-
-			//获得起点和端点最近点
-			pointItselfs.append(lineSegItself.startPoint());
-			pointOthers.append(otherPln.closestPointTo(lineSegItself.startPoint(), tol));
-
-			pointItselfs.append(lineSegItself.endPoint());
-			pointOthers.append(otherPln.closestPointTo(lineSegItself.endPoint(), tol));
-
-			pointItselfs.append(this->closestPointTo(lineSegOtherf.startPoint(), tol));
-			pointOthers.append(lineSegOtherf.startPoint());
-
-			pointItselfs.append(this->closestPointTo(lineSegOtherf.endPoint(), tol));
-			pointOthers.append(lineSegOtherf.endPoint());
 		}
 	}
 
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		double dist = pointItselfs[i].distanceTo(pointOthers[i]);
-		if (i == 0 || dist < minDist) {
-			minDist = dist;
-			closest = pointItselfs[i];
-			pointOnOtherPln = pointOthers[i];
-		}
+	for (int i = 1; i < points2.length(); i++) {
+		GeLineSeg3d lineSegOther(points2[i - 1], points2[i]);
+		pointItselfs.append(this->closestPointTo(lineSegOther.startPoint(), tol));
+		pointOthers.append(lineSegOther.startPoint());
+
+		pointItselfs.append(this->closestPointTo(lineSegOther.endPoint(), tol));
+		pointOthers.append(lineSegOther.endPoint());
 	}
+
+	bounded_plane_select_closest_pair(pointItselfs, pointOthers, closest, pointOnOtherPln);
 
 	return closest;
 }

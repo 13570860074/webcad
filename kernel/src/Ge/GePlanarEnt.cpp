@@ -6,6 +6,17 @@
 #include "GeImpl.h"
 
 
+static double planar_signed_distance(const GePoint3d& pointOnPlane, const GeVector3d& unitNormal, const GePoint3d& point)
+{
+	return unitNormal.dotProduct(point - pointOnPlane);
+}
+
+static GePoint3d planar_ortho_project(const GePoint3d& pointOnPlane, const GeVector3d& unitNormal, const GePoint3d& point)
+{
+	return point + unitNormal * unitNormal.dotProduct(pointOnPlane - point);
+}
+
+
 
 GePlanarEnt::GePlanarEnt() {
 
@@ -16,6 +27,12 @@ GePlanarEnt::GePlanarEnt(const GePlanarEnt& _plane) {
 	GE_IMP_PLANARENT(this->m_pImpl)->xAxis = GE_IMP_PLANARENT(_plane.m_pImpl)->xAxis;
 	GE_IMP_PLANARENT(this->m_pImpl)->yAxis = GE_IMP_PLANARENT(_plane.m_pImpl)->yAxis;
 	GE_IMP_PLANARENT(this->m_pImpl)->isNormalReversed = GE_IMP_PLANARENT(_plane.m_pImpl)->isNormalReversed;
+}
+bool GePlanarEnt::isOnPlane(const GePoint3d& point) const {
+	return this->isOnPlane(point, GeContext::gTol);
+}
+bool GePlanarEnt::isOnPlane(const GePoint3d& point, const GeTol& tol) const {
+	return fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), point)) <= tol.equalPoint();
 }
 GePoint2d GePlanarEnt::paramOf(const GePoint3d& pnt) const {
 	return this->paramOf(pnt, GeContext::gTol);
@@ -33,11 +50,34 @@ GePoint2d GePlanarEnt::paramOf(const GePoint3d& pnt, const GeTol& tol) const {
 		offset.dotProduct(vCrossProdNormal) / tripleProduct,
 		offset.dotProduct(normalCrossProdU) / tripleProduct);
 }
+bool GePlanarEnt::isOn(const GePoint3d& pnt) const {
+	return this->isOn(pnt, GeContext::gTol);
+}
+bool GePlanarEnt::isOn(const GePoint3d& pnt, const GeTol& tol) const {
+	GePoint2d paramPoint;
+	return this->isOn(pnt, paramPoint, tol);
+}
+bool GePlanarEnt::isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const {
+	return this->isOn(pnt, paramPoint, GeContext::gTol);
+}
+bool GePlanarEnt::isOn(const GePoint3d& pnt, GePoint2d& paramPoint, const GeTol& tol) const {
+	if (this->isOnPlane(pnt, tol) == false) {
+		return false;
+	}
+
+	GeInterval rangeU;
+	GeInterval rangeV;
+	this->getEnvelope(rangeU, rangeV);
+	paramPoint = this->paramOf(pnt, tol);
+	rangeU.setTolerance(tol.equalPoint());
+	rangeV.setTolerance(tol.equalPoint());
+	return rangeU.contains(paramPoint.x) && rangeV.contains(paramPoint.y);
+}
 GePoint3d GePlanarEnt::closestPointTo(const GePoint3d& pnt) const {
 	return this->closestPointTo(pnt, GeContext::gTol);
 }
 GePoint3d GePlanarEnt::closestPointTo(const GePoint3d& pnt, const GeTol& tol) const {
-	return pnt.orthoProject(GePlane(this->pointOnPlane(), this->normal()));
+	return planar_ortho_project(this->pointOnPlane(), this->normal(), pnt);
 }
 double GePlanarEnt::distanceTo(const GePoint3d& pnt) const {
 	return this->distanceTo(pnt, GeContext::gTol);
@@ -82,23 +122,52 @@ GePoint3d GePlanarEnt::closestPointToLinearEnt(const GeLinearEnt3d& line, GePoin
 		pointOnLine = closest;
 		return closest;
 	}
-	pointOnLine = line.pointOnLine();
-	return pointOnLine.orthoProject(GePlane(this->pointOnPlane(), this->normal()));
+
+	GeInterval interval;
+	line.getInterval(interval);
+	double lowerParam = interval.lowerBound();
+	double upperParam = interval.upperBound();
+	GePoint3d lowerPoint = line.evalPoint(lowerParam);
+	GePoint3d upperPoint = line.evalPoint(upperParam);
+	double lowerDist = fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), lowerPoint));
+	double upperDist = fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), upperPoint));
+	pointOnLine = (lowerDist < upperDist) ? lowerPoint : upperPoint;
+	return planar_ortho_project(this->pointOnPlane(), this->normal(), pointOnLine);
 }
 GePoint3d GePlanarEnt::closestPointToPlanarEnt(const GePlanarEnt& otherPln, GePoint3d& pointOnOtherPln) const {
 	return this->closestPointToPlanarEnt(otherPln, pointOnOtherPln, GeContext::gTol);
 }
 GePoint3d GePlanarEnt::closestPointToPlanarEnt(const GePlanarEnt& otherPln, GePoint3d& pointOnOtherPln, const GeTol& tol) const {
-	GePlane thisPlane(this->pointOnPlane(), this->normal());
-	GePlane otherPlane(otherPln.pointOnPlane(), otherPln.normal());
-	GeLine3d intersection;
-	if (thisPlane.intersectWith(otherPlane, intersection, tol))
+	GeVector3d normal0 = this->normal();
+	GeVector3d normal1 = otherPln.normal();
+	double coef0 = 0.0;
+	double coef1 = 0.0;
+	this->getCoefficients(normal0.x, normal0.y, normal0.z, coef0);
+	otherPln.getCoefficients(normal1.x, normal1.y, normal1.z, coef1);
+	double n00 = normal0.lengthSqrd();
+	double n01 = normal0.dotProduct(normal1);
+	double n11 = normal1.lengthSqrd();
+	double det = n00 * n11 - n01 * n01;
+	if (fabs(det) <= tol.equalPoint())
 	{
-		pointOnOtherPln = intersection.pointOnLine();
-		return intersection.pointOnLine();
+		double envelope1 = fabs(planar_signed_distance(this->pointOnPlane(), normal0, otherPln.pointOnPlane()));
+		double envelope2 = fabs(planar_signed_distance(otherPln.pointOnPlane(), normal1, this->pointOnPlane()));
+		if (envelope1 >= envelope2)
+		{
+			pointOnOtherPln = otherPln.pointOnPlane();
+			return planar_ortho_project(this->pointOnPlane(), normal0, pointOnOtherPln);
+		}
+
+		pointOnOtherPln = planar_ortho_project(otherPln.pointOnPlane(), normal1, this->pointOnPlane());
+		return this->pointOnPlane();
 	}
-	pointOnOtherPln = otherPln.pointOnPlane();
-	return pointOnOtherPln.orthoProject(thisPlane);
+
+	double invDet = 1.0 / det;
+	double c0 = (n11 * coef0 - n01 * coef1) * invDet;
+	double c1 = (n00 * coef1 - n01 * coef0) * invDet;
+	GeVector3d tmp = normal0 * c0 + normal1 * c1;
+	pointOnOtherPln.set(-tmp.x, -tmp.y, -tmp.z);
+	return pointOnOtherPln;
 }
 bool GePlanarEnt::isParallelTo(const GeLinearEnt3d& linEnt) const {
 	return this->isParallelTo(linEnt, GeContext::gTol);
@@ -135,6 +204,11 @@ void GePlanarEnt::get(GePoint3d& origin, GeVector3d& uVec, GeVector3d& vVec) con
 	uVec = GE_IMP_PLANARENT(this->m_pImpl)->xAxis;
 	vVec = GE_IMP_PLANARENT(this->m_pImpl)->yAxis;
 }
+void GePlanarEnt::get(GePoint3d& uPnt, GePoint3d& origin, GePoint3d& vPnt) const {
+	origin = this->pointOnPlane();
+	uPnt = origin + GE_IMP_PLANARENT(this->m_pImpl)->xAxis;
+	vPnt = origin + GE_IMP_PLANARENT(this->m_pImpl)->yAxis;
+}
 GePoint3d GePlanarEnt::pointOnPlane() const {
 	return GE_IMP_PLANARENT(this->m_pImpl)->origin;
 }
@@ -155,6 +229,18 @@ void GePlanarEnt::getCoordSystem(GePoint3d& origin, GeVector3d& axis1, GeVector3
 	axis2.set(GE_IMP_PLANARENT(this->m_pImpl)->yAxis.x, GE_IMP_PLANARENT(this->m_pImpl)->yAxis.y, GE_IMP_PLANARENT(this->m_pImpl)->yAxis.z);
 	axis1.normalize();
 	axis2.normalize();
+}
+bool GePlanarEnt::project(const GePoint3d& p, const GeVector3d& unitDir, GePoint3d& projP) const {
+	return this->project(p, unitDir, projP, GeContext::gTol);
+}
+bool GePlanarEnt::project(const GePoint3d& p, const GeVector3d& unitDir, GePoint3d& projP, const GeTol& tol) const {
+	double denom = unitDir.dotProduct(this->normal());
+	if (fabs(denom) < tol.equalVector()) {
+		return false;
+	}
+	double factor = this->normal().dotProduct(this->pointOnPlane() - p) / denom;
+	projP = p + unitDir * factor;
+	return true;
 }
 GePlanarEnt& GePlanarEnt::operator = (const GePlanarEnt& src) {
 	GE_IMP_PLANARENT(this->m_pImpl)->origin = GE_IMP_PLANARENT(src.m_pImpl)->origin;

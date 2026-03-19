@@ -386,6 +386,7 @@ public:
 		this->startAngleV = -PI;
 		this->endAngleV = PI;
 		this->isOuterNormal = false;
+		this->reverseV = false;
 	}
 	virtual ~GeSphereImpl()
 	{
@@ -400,6 +401,7 @@ public:
 	double startAngleV;
 	double endAngleV;
 	bool isOuterNormal;
+	bool reverseV;
 };
 
 #endif

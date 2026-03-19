@@ -1,6 +1,9 @@
 #include "GeSphere.h"
+#include "GeCircArc3d.h"
 #include "GeInterval.h"
 #include "GeLinearEnt3d.h"
+#include "GeMatrix3d.h"
+#include "GePlane.h"
 #include "GePointOnSurface.h"
 #include "GeImpl.h"
 
@@ -30,6 +33,47 @@ static double sphere_clamp_value(double value, double minValue, double maxValue)
     return value;
 }
 
+static bool sphere_is_uni_scaled_ortho(const GeMatrix3d& xfm, double& scaleFactor, const GeTol& tol = GeContext::gTol)
+{
+    if (xfm.isPerspective())
+    {
+        return false;
+    }
+
+    GeVector3d axisX = GeVector3d::kXAxis;
+    GeVector3d axisY = GeVector3d::kYAxis;
+    GeVector3d axisZ = GeVector3d::kZAxis;
+    axisX.transformBy(xfm);
+    axisY.transformBy(xfm);
+    axisZ.transformBy(xfm);
+
+    double lengthX = axisX.length();
+    double lengthY = axisY.length();
+    double lengthZ = axisZ.length();
+    if (lengthX <= tol.equalVector() || lengthY <= tol.equalVector() || lengthZ <= tol.equalVector())
+    {
+        return false;
+    }
+
+    if (abs(lengthX - lengthY) > tol.equalVector() || abs(lengthX - lengthZ) > tol.equalVector())
+    {
+        return false;
+    }
+
+    GeVector3d unitX = axisX.normal();
+    GeVector3d unitY = axisY.normal();
+    GeVector3d unitZ = axisZ.normal();
+    if (abs(unitX.dotProduct(unitY)) > tol.equalVector()
+        || abs(unitX.dotProduct(unitZ)) > tol.equalVector()
+        || abs(unitY.dotProduct(unitZ)) > tol.equalVector())
+    {
+        return false;
+    }
+
+    scaleFactor = (lengthX + lengthY + lengthZ) / 3.0;
+    return true;
+}
+
 static void sphere_get_basis(const GeSphere& sphere, GeVector3d& axisU, GeVector3d& axisV, GeVector3d& axisW)
 {
     axisW = sphere.northAxis().normal();
@@ -54,6 +98,11 @@ static void sphere_get_basis(const GeSphere& sphere, GeVector3d& axisU, GeVector
 
     axisU.normalize();
     axisV.normalize();
+
+    if (sphere.isReverseV())
+    {
+        axisV.negate();
+    }
 }
 
 static GePoint2d sphere_param_from_vector(const GeSphere& sphere, const GeVector3d& direction)
@@ -141,6 +190,70 @@ static GePoint2d sphere_clamp_param(const GeSphere& sphere, const GePoint2d& par
     return GePoint2d(u, sphere_normalize_angle(v));
 }
 
+static double sphere_closest_periodic_value(double value, double center)
+{
+    while (value - center > PI)
+    {
+        value -= PI * 2.0;
+    }
+    while (value - center <= -PI)
+    {
+        value += PI * 2.0;
+    }
+    return value;
+}
+
+static double sphere_move_into_valid_interval(double value, double start, double end)
+{
+    return sphere_closest_periodic_value(value, (start + end) * 0.5);
+}
+
+static void sphere_make_interval_valid(double& start, double& end, double maxSpan)
+{
+    if (end < start)
+    {
+        double temp = start;
+        start = end;
+        end = temp;
+    }
+
+    double span = end - start;
+    if (span > maxSpan)
+    {
+        end = start + maxSpan;
+    }
+}
+
+static GeVector3d sphere_rotated_ref_axis(const GeSphere& sphere, double v)
+{
+    GeVector3d ref = sphere.refAxis();
+    ref.rotateBy(sphere.isReverseV() ? -v : v, sphere.northAxis());
+    return ref;
+}
+
+static double sphere_longitude_from_point(const GeSphere& sphere, const GePoint3d& point, const GeTol& tol)
+{
+    GeVector3d normal = sphere.northAxis().normal();
+    GeVector3d toPoint = point - sphere.center();
+    double height = toPoint.dotProduct(normal);
+    GeVector3d projected = toPoint - normal * height;
+    if (projected.length() <= tol.equalVector())
+    {
+        return 0.0;
+    }
+
+    double v = sphere.refAxis().normal().angleToCCW(projected.normal(), normal);
+    if (v > PI)
+    {
+        v -= PI * 2.0;
+    }
+    if (sphere.isReverseV())
+    {
+        v = -v;
+    }
+    return v;
+}
+
 GeSphere::GeSphere()
 {
     GE_IMP_MEMORY_ENTITY(GeSphere);
@@ -173,6 +286,7 @@ GeSphere::GeSphere(const GeSphere &sphere)
     GE_IMP_SPHERE(this->m_pImpl)->startAngleV = GE_IMP_SPHERE(sphere.m_pImpl)->startAngleV;
     GE_IMP_SPHERE(this->m_pImpl)->endAngleV = GE_IMP_SPHERE(sphere.m_pImpl)->endAngleV;
     GE_IMP_SPHERE(this->m_pImpl)->isOuterNormal = GE_IMP_SPHERE(sphere.m_pImpl)->isOuterNormal;
+    GE_IMP_SPHERE(this->m_pImpl)->reverseV = GE_IMP_SPHERE(sphere.m_pImpl)->reverseV;
 }
 
 bool GeSphere::isKindOf(Ge::EntityId entType) const
@@ -199,7 +313,68 @@ GeSphere* GeSphere::copy() const
     GE_IMP_SPHERE(sphere->m_pImpl)->startAngleV = GE_IMP_SPHERE(this->m_pImpl)->startAngleV;
     GE_IMP_SPHERE(sphere->m_pImpl)->endAngleV = GE_IMP_SPHERE(this->m_pImpl)->endAngleV;
     GE_IMP_SPHERE(sphere->m_pImpl)->isOuterNormal = GE_IMP_SPHERE(this->m_pImpl)->isOuterNormal;
+    GE_IMP_SPHERE(sphere->m_pImpl)->reverseV = GE_IMP_SPHERE(this->m_pImpl)->reverseV;
     return sphere;
+}
+
+GeSphere& GeSphere::transformBy(const GeMatrix3d& xfm)
+{
+    double scaleFactor = 1.0;
+    if (sphere_is_uni_scaled_ortho(xfm, scaleFactor) == false)
+    {
+        return *this;
+    }
+
+    GE_IMP_SPHERE(this->m_pImpl)->center.transformBy(xfm);
+    GE_IMP_SPHERE(this->m_pImpl)->radius *= scaleFactor;
+    GE_IMP_SPHERE(this->m_pImpl)->northAxis.transformBy(xfm);
+    GE_IMP_SPHERE(this->m_pImpl)->refAxis.transformBy(xfm);
+    GE_IMP_SPHERE(this->m_pImpl)->northAxis.normalize();
+    GE_IMP_SPHERE(this->m_pImpl)->refAxis.normalize();
+
+    if (xfm.det() < 0.0)
+    {
+        GE_IMP_SPHERE(this->m_pImpl)->reverseV = !GE_IMP_SPHERE(this->m_pImpl)->reverseV;
+    }
+
+    return *this;
+}
+
+GeSphere& GeSphere::translateBy(const GeVector3d& translateVec)
+{
+    GE_IMP_SPHERE(this->m_pImpl)->center += translateVec;
+    return *this;
+}
+
+GeSphere& GeSphere::rotateBy(double angle, const GeVector3d& vec)
+{
+    return this->rotateBy(angle, vec, GePoint3d::kOrigin);
+}
+
+GeSphere& GeSphere::rotateBy(double angle, const GeVector3d& vec, const GePoint3d& wrtPoint)
+{
+    GeMatrix3d xfm;
+    xfm.setToRotation(angle, vec, wrtPoint);
+    return this->transformBy(xfm);
+}
+
+GeSphere& GeSphere::mirror(const GePlane& plane)
+{
+    GeMatrix3d xfm;
+    xfm.setToMirroring(plane);
+    return this->transformBy(xfm);
+}
+
+GeSphere& GeSphere::scaleBy(double scaleFactor)
+{
+    return this->scaleBy(scaleFactor, GePoint3d::kOrigin);
+}
+
+GeSphere& GeSphere::scaleBy(double scaleFactor, const GePoint3d& wrtPoint)
+{
+    GeMatrix3d xfm;
+    xfm.setToScaling(scaleFactor, wrtPoint);
+    return this->transformBy(xfm);
 }
 
 double GeSphere::radius() const
@@ -254,6 +429,11 @@ Adesk::Boolean GeSphere::isClosed(const GeTol &tol) const
     return false;
 }
 
+Adesk::Boolean GeSphere::isReverseV() const
+{
+    return GE_IMP_SPHERE(this->m_pImpl)->reverseV;
+}
+
 GeSphere &GeSphere::setRadius(double _radius)
 {
     GE_IMP_SPHERE(this->m_pImpl)->radius = _radius;
@@ -261,27 +441,35 @@ GeSphere &GeSphere::setRadius(double _radius)
 }
 GeSphere &GeSphere::setAnglesInU(double start, double end)
 {
+    sphere_make_interval_valid(start, end, PI);
     GE_IMP_SPHERE(this->m_pImpl)->startAngleU = start;
     GE_IMP_SPHERE(this->m_pImpl)->endAngleU = end;
     return *this;
 }
 GeSphere &GeSphere::setAnglesInV(double start, double end)
 {
+    sphere_make_interval_valid(start, end, PI * 2.0);
     GE_IMP_SPHERE(this->m_pImpl)->startAngleV = start;
     GE_IMP_SPHERE(this->m_pImpl)->endAngleV = end;
     return *this;
 }
+
+GeSphere &GeSphere::setReverseV(Adesk::Boolean isReverseV)
+{
+    GE_IMP_SPHERE(this->m_pImpl)->reverseV = isReverseV;
+    return *this;
+}
+
 GeSphere &GeSphere::set(double radius, const GePoint3d &center)
 {
     GE_IMP_SPHERE(this->m_pImpl)->radius = radius;
     GE_IMP_SPHERE(this->m_pImpl)->center = center;
     GE_IMP_SPHERE(this->m_pImpl)->northAxis = GeVector3d::kYAxis;
     GE_IMP_SPHERE(this->m_pImpl)->refAxis = GeVector3d::kXAxis;
-    GE_IMP_SPHERE(this->m_pImpl)->startAngleU = -PI * 0.5;
-    GE_IMP_SPHERE(this->m_pImpl)->endAngleU = PI * 0.5;
-    GE_IMP_SPHERE(this->m_pImpl)->startAngleV = -PI;
-    GE_IMP_SPHERE(this->m_pImpl)->endAngleV = PI;
     GE_IMP_SPHERE(this->m_pImpl)->isOuterNormal = false;
+    GE_IMP_SPHERE(this->m_pImpl)->reverseV = false;
+    this->setAnglesInU(-PI * 0.5, PI * 0.5);
+    this->setAnglesInV(-PI, PI);
     return *this;
 }
 GeSphere &GeSphere::set(double radius,
@@ -297,11 +485,10 @@ GeSphere &GeSphere::set(double radius,
     GE_IMP_SPHERE(this->m_pImpl)->center = center;
     GE_IMP_SPHERE(this->m_pImpl)->northAxis = northAxis.normal();
     GE_IMP_SPHERE(this->m_pImpl)->refAxis = refAxis.normal();
-    GE_IMP_SPHERE(this->m_pImpl)->startAngleU = startAngleU;
-    GE_IMP_SPHERE(this->m_pImpl)->endAngleU = endAngleU;
-    GE_IMP_SPHERE(this->m_pImpl)->startAngleV = startAngleV;
-    GE_IMP_SPHERE(this->m_pImpl)->endAngleV = endAngleV;
     GE_IMP_SPHERE(this->m_pImpl)->isOuterNormal = false;
+    GE_IMP_SPHERE(this->m_pImpl)->reverseV = false;
+    this->setAnglesInU(startAngleU, endAngleU);
+    this->setAnglesInV(startAngleV, endAngleV);
     return *this;
 }
 
@@ -316,6 +503,7 @@ GeSphere &GeSphere::operator=(const GeSphere &sphere)
     GE_IMP_SPHERE(this->m_pImpl)->startAngleV = GE_IMP_SPHERE(sphere.m_pImpl)->startAngleV;
     GE_IMP_SPHERE(this->m_pImpl)->endAngleV = GE_IMP_SPHERE(sphere.m_pImpl)->endAngleV;
     GE_IMP_SPHERE(this->m_pImpl)->isOuterNormal = GE_IMP_SPHERE(sphere.m_pImpl)->isOuterNormal;
+    GE_IMP_SPHERE(this->m_pImpl)->reverseV = GE_IMP_SPHERE(sphere.m_pImpl)->reverseV;
     return *this;
 }
 
@@ -406,9 +594,18 @@ GePoint2d GeSphere::paramOf(const GePoint3d& pnt, const GeTol& tol) const
     GeVector3d vec = pnt - this->center();
     if (vec.length() < tol.equalPoint())
     {
-        return GePoint2d(0.0, 0.0);
+        double startV;
+        double endV;
+        this->getAnglesInV(startV, endV);
+        return GePoint2d(0.0, sphere_move_into_valid_interval(0.0, startV, endV));
     }
-    return sphere_param_from_vector(*this, vec);
+
+    GePoint2d param = sphere_param_from_vector(*this, vec);
+    double startV;
+    double endV;
+    this->getAnglesInV(startV, endV);
+    param.y = sphere_move_into_valid_interval(param.y, startV, endV);
+    return param;
 }
 
 bool GeSphere::isOn(const GePoint3d& pnt) const
@@ -461,11 +658,57 @@ GePoint3d GeSphere::closestPointTo(const GePoint3d& pnt, const GeTol& tol) const
         double endV;
         this->getAnglesInU(startU, endU);
         this->getAnglesInV(startV, endV);
-        return this->evalPoint(GePoint2d(sphere_normalize_angle(startU), startV));
+		double minU = startU < endU ? startU : endU;
+		double maxU = startU < endU ? endU : startU;
+		double u = sphere_clamp_value(0.0, minU, maxU);
+		double v = sphere_move_into_valid_interval(0.0, startV, endV);
+		return this->evalPoint(GePoint2d(u, v));
     }
 
-    GePoint3d radialPoint = this->center() + vec.normal() * this->radius();
-    GePoint2d param = this->paramOf(radialPoint, tol);
+    double startU;
+    double endU;
+    double startV;
+    double endV;
+    this->getAnglesInU(startU, endU);
+    this->getAnglesInV(startV, endV);
+
+    double v = sphere_longitude_from_point(*this, pnt, tol);
+    v = sphere_move_into_valid_interval(v, startV, endV);
+
+    double u = startU;
+    GeInterval intervalU(startU, endU);
+
+    if (sphere_v_in_range(v, startV, endV, tol) == false)
+    {
+        GeVector3d ref1 = sphere_rotated_ref_axis(*this, startV);
+        GeCircArc3d uCircle1(this->center(), -this->northAxis().crossProduct(ref1), ref1, this->radius(), startU, endU);
+        double u1 = startU;
+        GePoint3d pnt1 = static_cast<const GeCurve3d&>(uCircle1).closestPointTo(pnt, u1, &intervalU, tol);
+
+        GeVector3d ref2 = sphere_rotated_ref_axis(*this, endV);
+        GeCircArc3d uCircle2(this->center(), -this->northAxis().crossProduct(ref2), ref2, this->radius(), startU, endU);
+        double u2 = startU;
+        GePoint3d pnt2 = static_cast<const GeCurve3d&>(uCircle2).closestPointTo(pnt, u2, &intervalU, tol);
+
+        if (pnt.distanceTo(pnt1) <= pnt.distanceTo(pnt2))
+        {
+            v = startV;
+            u = u1;
+        }
+        else
+        {
+            v = endV;
+            u = u2;
+        }
+    }
+    else
+    {
+        GeVector3d ref = sphere_rotated_ref_axis(*this, v);
+        GeCircArc3d uCircle(this->center(), -this->northAxis().crossProduct(ref), ref, this->radius(), startU, endU);
+        static_cast<const GeCurve3d&>(uCircle).closestPointTo(pnt, u, &intervalU, tol);
+    }
+
+    GePoint2d param(u, v);
     GePoint2d clamped = sphere_clamp_param(*this, param, tol);
     return this->evalPoint(clamped);
 }
@@ -500,7 +743,7 @@ bool GeSphere::isNormalReversed() const
 
 bool GeSphere::isLeftHanded() const
 {
-    return this->isOuterNormal();
+    return this->isOuterNormal() != (GE_IMP_SPHERE(this->m_pImpl)->reverseV != 0);
 }
 
 GeSurface& GeSphere::reverseNormal()

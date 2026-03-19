@@ -18,6 +18,13 @@ public:
     bool isKindOf(Ge::EntityId entType) const;
     Ge::EntityId type() const;
     GeSphere* copy() const;
+    GeSphere& transformBy(const GeMatrix3d& xfm);
+    GeSphere& translateBy(const GeVector3d& translateVec);
+    GeSphere& rotateBy(double angle, const GeVector3d& vec);
+    GeSphere& rotateBy(double angle, const GeVector3d& vec, const GePoint3d& wrtPoint = GePoint3d::kOrigin);
+    GeSphere& mirror(const GePlane& plane);
+    GeSphere& scaleBy(double scaleFactor);
+    GeSphere& scaleBy(double scaleFactor, const GePoint3d& wrtPoint = GePoint3d::kOrigin);
 
     // Geometric properties.
     //
@@ -31,10 +38,12 @@ public:
     GePoint3d southPole() const;
     Adesk::Boolean isOuterNormal() const;
     Adesk::Boolean isClosed(const GeTol &tol = GeContext::gTol) const;
+    Adesk::Boolean isReverseV() const;
 
     GeSphere &setRadius(double);
     GeSphere &setAnglesInU(double start, double end);
     GeSphere &setAnglesInV(double start, double end);
+    GeSphere &setReverseV(Adesk::Boolean isReverseV);
     GeSphere &set(double radius, const GePoint3d &center);
     GeSphere &set(double radius, const GePoint3d &center,
                   const GeVector3d &northAxis,

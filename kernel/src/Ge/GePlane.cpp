@@ -45,13 +45,7 @@ GePlane::GePlane(double a, double b, double c, double d) {
 	this->set(a, b, c, d);
 }
 double GePlane::signedDistanceTo(const GePoint3d& pnt) const {
-	GePoint3d point = pnt.orthoProject(*this);
-	GeVector3d vec = pnt - point;
-	vec.normalize();
-	if (vec.isEqualTo(this->normal()) == false) {
-		return 0 - point.distanceTo(pnt);
-	}
-	return point.distanceTo(pnt);
+	return this->normal().dotProduct(pnt - this->pointOnPlane());
 }
 bool GePlane::intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& resultPnt) const {
 	return this->intersectWith(linEnt, resultPnt, GeContext::gTol);
@@ -82,34 +76,32 @@ bool GePlane::intersectWith(const GePlane& otherPln, GeLine3d& resultLine) const
 	return this->intersectWith(otherPln, resultLine, GeContext::gTol);
 }
 bool GePlane::intersectWith(const GePlane& otherPln, GeLine3d& resultLine, const GeTol& tol) const {
-
-	//如果两平面平行则无交线
-	if (this->isParallelTo(otherPln, tol) == true) {
+	GeVector3d normal0 = this->normal();
+	GeVector3d normal1 = otherPln.normal();
+	GeVector3d direction = normal0.crossProduct(normal1);
+	if (direction.length() <= tol.equalVector()) {
 		return false;
 	}
 
-	//获得两法向的夹角
-	double angle = this->normal().angle(otherPln.normal());
+	double coef0 = 0.0;
+	double coef1 = 0.0;
+	this->getCoefficients(normal0.x, normal0.y, normal0.z, coef0);
+	otherPln.getCoefficients(normal1.x, normal1.y, normal1.z, coef1);
 
-	//求主平面原点到输入平面的投影点
-	GePoint3d point = this->pointOnPlane().orthoProject(otherPln);
-
-	//获得对边长度
-	double dist = this->pointOnPlane().distanceTo(point);
-	dist = dist / tan(angle);
-
-	//获得投影点到输入平面原点的向量
-	GeVector3d vec = point - otherPln.pointOnPlane();
-	vec.normalize();
-
-	//获得相交线原点
-	point = point + (vec * dist);
-	if (this->isOn(point, tol) == false) {
-		point.translation(vec * (2.0 * -dist));
+	double n00 = normal0.lengthSqrd();
+	double n01 = normal0.dotProduct(normal1);
+	double n11 = normal1.lengthSqrd();
+	double det = n00 * n11 - n01 * n01;
+	if (fabs(det) <= tol.equalPoint()) {
+		return false;
 	}
 
-	resultLine.set(point, this->normal().crossProduct(otherPln.normal()));
-
+	double invDet = 1.0 / det;
+	double c0 = (n11 * coef0 - n01 * coef1) * invDet;
+	double c1 = (n00 * coef1 - n01 * coef0) * invDet;
+	GeVector3d tmp = normal0 * c0 + normal1 * c1;
+	GePoint3d point(-tmp.x, -tmp.y, -tmp.z);
+	resultLine.set(point, direction);
 	return true;
 }
 bool GePlane::intersectWith(const GeBoundedPlane& bndPln, GeLineSeg3d& resultLineSeg) const {
@@ -154,8 +146,26 @@ bool GePlane::intersectWith(const GeBoundedPlane& bndPln, GeLineSeg3d& resultLin
 		}
 	}
 
-	if (linePoints.length() == 2) {
-		resultLineSeg.set(linePoints[0], linePoints[1]);
+	if (linePoints.length() >= 2) {
+		int minIndex = 0;
+		int maxIndex = 0;
+		double minParam = line.paramOf(linePoints[0], tol);
+		double maxParam = minParam;
+		for (int i = 1; i < linePoints.length(); ++i) {
+			double param = line.paramOf(linePoints[i], tol);
+			if (param < minParam) {
+				minParam = param;
+				minIndex = i;
+			}
+			if (param > maxParam) {
+				maxParam = param;
+				maxIndex = i;
+			}
+		}
+		if (linePoints[minIndex].isEqualTo(linePoints[maxIndex], tol)) {
+			return false;
+		}
+		resultLineSeg.set(linePoints[minIndex], linePoints[maxIndex]);
 		return true;
 	}
 	return false;
@@ -580,212 +590,64 @@ GePoint3d GePlane::closestPointToLinearEnt(const GeLine3d& line, GePoint3d& poin
 	return this->closestPointToLinearEnt(line, pointOnLine, GeContext::gTol);
 }
 GePoint3d GePlane::closestPointToLinearEnt(const GeLine3d& line, GePoint3d& pointOnLine, const GeTol& tol) const{
-
-	GePoint3d closest;
-
-	//判断是否平行,如果平行则计算点到平面的距离
-	if (this->isParallelTo(line, tol) == true) {
-
-		pointOnLine.set(line.pointOnLine().x, line.pointOnLine().y, line.pointOnLine().z);
-		closest = pointOnLine.orthoProject(*this);
-		return closest;
-	}
-
-	GePoint3dArray pointItselfs, pointOthers;
-
-	//获得直线和平面的交点
-	GePoint3d intersect;
-	if (this->intersectWith(line, intersect, tol) == true) {
-		pointItselfs.append(intersect);
-		pointOthers.append(intersect);
-	}
-
-	//计算出最近点
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		for (int u = 0; u < pointOthers.length(); u++) {
-			double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-			if (i == 0 && u == 0) {
-				minDist = dist;
-				closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
-				pointOnLine.set(pointOthers[u].x, pointOthers[u].y, pointOthers[u].z);
-				continue;
-			}
-			if (dist < minDist)
-			{
-				minDist = dist;
-				closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
-				pointOnLine.set(pointOthers[u].x, pointOthers[u].y, pointOthers[u].z);
-			}
-		}
-	}
-
-	return closest;
+	return GePlanarEnt::closestPointToLinearEnt(line, pointOnLine, tol);
 }
 GePoint3d GePlane::closestPointToLinearEnt(const GeLineSeg3d& line, GePoint3d& pointOnLine) const{
 	return this->closestPointToLinearEnt(line, pointOnLine, GeContext::gTol);
 }
 GePoint3d GePlane::closestPointToLinearEnt(const GeLineSeg3d& line, GePoint3d& pointOnLine, const GeTol& tol) const{
-	
-	GePoint3d closest;
-
-	//判断是否平行,如果平行则计算点到平面的距离
-	if (this->isParallelTo(line, tol) == true) {
-
-		pointOnLine.set(line.pointOnLine().x, line.pointOnLine().y, line.pointOnLine().z);
-		closest = pointOnLine.orthoProject(*this);
-		return closest;
-	}
-
-	GePoint3dArray pointItselfs, pointOthers;
-
-	//获得直线和平面的交点
-	GePoint3d intersect;
-	if (this->intersectWith(line, intersect, tol) == true) {
-		pointItselfs.append(intersect);
-		pointOthers.append(intersect);
-	}
-	else {
-		pointItselfs.append(line.startPoint().orthoProject(*this));
-		pointOthers.append(line.startPoint());
-
-		pointItselfs.append(line.endPoint().orthoProject(*this));
-		pointOthers.append(line.endPoint());
-	}
-
-	//计算出最近点
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		for (int u = 0; u < pointOthers.length(); u++) {
-			double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-			if (i == 0 && u == 0) {
-				minDist = dist;
-				closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
-				pointOnLine.set(pointOthers[u].x, pointOthers[u].y, pointOthers[u].z);
-				continue;
-			}
-			if (dist < minDist)
-			{
-				minDist = dist;
-				closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
-				pointOnLine.set(pointOthers[u].x, pointOthers[u].y, pointOthers[u].z);
-			}
-		}
-	}
-
-	return closest;
+	return GePlanarEnt::closestPointToLinearEnt(line, pointOnLine, tol);
 }
 GePoint3d GePlane::closestPointToLinearEnt(const GeRay3d& line, GePoint3d& pointOnLine) const{
 	return this->closestPointToLinearEnt(line, pointOnLine, GeContext::gTol);
 }
 GePoint3d GePlane::closestPointToLinearEnt(const GeRay3d& line, GePoint3d& pointOnLine, const GeTol& tol) const{
-	GePoint3d closest;
-
-	//判断是否平行,如果平行则计算点到平面的距离
-	if (this->isParallelTo(line, tol) == true) {
-
-		pointOnLine.set(line.pointOnLine().x, line.pointOnLine().y, line.pointOnLine().z);
-		closest = pointOnLine.orthoProject(*this);
-		return closest;
-	}
-
-	GePoint3dArray pointItselfs, pointOthers;
-	pointOthers.append(line.pointOnLine());
-
-	//获得直线和平面的交点
-	GePoint3d intersect;
-	if (this->intersectWith(line, intersect, tol) == true) {
-		pointItselfs.append(intersect);
-		pointOthers.append(intersect);
-	}
-	else {
-		pointItselfs.append(line.pointOnLine().orthoProject(*this));
-		pointOthers.append(line.pointOnLine());
-	}
-
-	//计算出最近点
-	double minDist = 0.0;
-	for (int i = 0; i < pointItselfs.length(); i++) {
-		for (int u = 0; u < pointOthers.length(); u++) {
-			double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-			if (i == 0 && u == 0) {
-				minDist = dist;
-				closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
-				pointOnLine.set(pointOthers[u].x, pointOthers[u].y, pointOthers[u].z);
-				continue;
-			}
-			if (dist < minDist)
-			{
-				minDist = dist;
-				closest.set(pointItselfs[i].x, pointItselfs[i].y, pointItselfs[i].z);
-				pointOnLine.set(pointOthers[u].x, pointOthers[u].y, pointOthers[u].z);
-			}
-		}
-	}
-
-	return closest;
+	return GePlanarEnt::closestPointToLinearEnt(line, pointOnLine, tol);
 }
 GePoint3d GePlane::closestPointToPlanarEnt(const GePlane& otherPln, GePoint3d& pointOnOtherPln) const{
 	return this->closestPointToPlanarEnt(otherPln, pointOnOtherPln, GeContext::gTol);
 }
 GePoint3d GePlane::closestPointToPlanarEnt(const GePlane& otherPln, GePoint3d& pointOnOtherPln, const GeTol& tol) const {
-	
-	GePoint3d closest;
-
-	//判断是否平行
-	if (this->isParallelTo(otherPln, tol) == true) {
-		pointOnOtherPln = otherPln.pointOnPlane();
-		closest = pointOnOtherPln.orthoProject(*this);
-		return closest;
-	}
-
-	//获得最近点
-	GeLine3d line;
-	if (this->intersectWith(otherPln, line, tol) == true) {
-		pointOnOtherPln = line.pointOnLine();
-		closest = line.pointOnLine();
-	}
-
-	return closest;
+	return GePlanarEnt::closestPointToPlanarEnt(otherPln, pointOnOtherPln, tol);
 }
 GePoint3d GePlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln, GePoint3d& pointOnOtherPln) const {
 	return this->closestPointToPlanarEnt(otherPln, pointOnOtherPln, GeContext::gTol);
 }
 GePoint3d GePlane::closestPointToPlanarEnt(const GeBoundedPlane& otherPln, GePoint3d& pointOnOtherPln, const GeTol& tol) const {
-
-	GePoint3d closest;
-
 	if (this->isParallelTo(otherPln, tol) == true) {
-		pointOnOtherPln = otherPln.pointOnPlane();
-		closest = pointOnOtherPln.orthoProject(*this);
-		return closest;
+		pointOnOtherPln = otherPln.closestPointTo(this->pointOnPlane(), tol);
+		return pointOnOtherPln.orthoProject(*this);
 	}
 
 	GeLineSeg3d intersectLine;
 	if (this->intersectWith(otherPln, intersectLine, tol) == true) {
-		pointOnOtherPln = intersectLine.startPoint();
-		return intersectLine.startPoint();
+		pointOnOtherPln = intersectLine.midPoint();
+		return pointOnOtherPln;
 	}
 
 	GePoint3d origin;
 	GeVector3d xAxis, yAxis;
 	otherPln.get(origin, xAxis, yAxis);
 
-	GePoint3dArray points;
-	points.append(origin);
-	points.append(origin + xAxis);
-	points.append(origin + xAxis + yAxis);
-	points.append(origin + yAxis);
+	GePoint3d corners[4] = {
+		origin,
+		origin + xAxis,
+		origin + xAxis + yAxis,
+		origin + yAxis
+	};
 
-	double midDist = 0.0;
-	for (int i = 0; i < points.length(); i++) {
-		GePoint3d point = points[i].orthoProject(*this);
-
-		double dist = point.distanceTo(points[i]);
-		if (i == 0 || dist < midDist) {
-			midDist = dist;
-			closest = point;
-			pointOnOtherPln = points[i];
+	GePoint3d closest;
+	double minDist = -1.0;
+	for (int i = 0; i < 4; ++i) {
+		GeLineSeg3d edge;
+		edge.set(corners[i], corners[(i + 1) % 4]);
+		GePoint3d candidateOnOther;
+		GePoint3d candidateOnThis = this->closestPointToLinearEnt(edge, candidateOnOther, tol);
+		double dist = candidateOnThis.distanceTo(candidateOnOther);
+		if (minDist < 0.0 || dist < minDist) {
+			minDist = dist;
+			closest = candidateOnThis;
+			pointOnOtherPln = candidateOnOther;
 		}
 	}
 

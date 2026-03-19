@@ -12,8 +12,15 @@ class GeCircArc3d;
 class GePlanarEnt : public GeSurface
 {
 public:
+    bool isOnPlane(const GePoint3d& point) const;
+    bool isOnPlane(const GePoint3d& point, const GeTol& tol) const;
+
     GePoint2d paramOf(const GePoint3d& pnt) const;
     GePoint2d paramOf(const GePoint3d& pnt, const GeTol& tol) const;
+    bool isOn(const GePoint3d& pnt) const;
+    bool isOn(const GePoint3d& pnt, const GeTol& tol) const;
+    bool isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const;
+    bool isOn(const GePoint3d& pnt, GePoint2d& paramPoint, const GeTol& tol) const;
     GePoint3d closestPointTo(const GePoint3d& pnt) const;
     GePoint3d closestPointTo(const GePoint3d& pnt, const GeTol& tol) const;
     double distanceTo(const GePoint3d& pnt) const;
@@ -53,6 +60,7 @@ public:
     // Get methods.
     //
     void get(GePoint3d& origin, GeVector3d& uVec, GeVector3d& vVec) const;
+    void get(GePoint3d& uPnt, GePoint3d& origin, GePoint3d& vPnt) const;
 
     // Geometric properties.
     //
@@ -60,6 +68,8 @@ public:
     GeVector3d normal() const;
     void getCoefficients(double& a, double& b, double& c, double& d) const;
     void getCoordSystem(GePoint3d& origin, GeVector3d& axis1,GeVector3d& axis2) const;
+    bool project(const GePoint3d& p, const GeVector3d& unitDir, GePoint3d& projP) const;
+    bool project(const GePoint3d& p, const GeVector3d& unitDir, GePoint3d& projP, const GeTol& tol) const;
     // Assignment operator.
     //
     GePlanarEnt& operator = (const GePlanarEnt& src);
