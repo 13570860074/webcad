@@ -3,6 +3,7 @@
 #include "GeLineSeg2d.h"
 #include "GeLine2d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 namespace {
 void appendCorners(const GePoint2d& basePoint, const GeVector2d& dir1, const GeVector2d& dir2, GePoint2dArray& points)
@@ -30,7 +31,7 @@ bool containsOnSegment(const GePoint2d& startPoint, const GePoint2d& endPoint, c
 		return startPoint.isEqualTo(point, tol);
 	}
 
-	if (fabs(lineVector.crossProduct(offset)) > tol.equalPoint()) {
+	if (std::fabs(lineVector.crossProduct(offset)) > tol.equalPoint()) {
 		return false;
 	}
 
@@ -49,7 +50,7 @@ bool containsInParallelogram(const GePoint2d& basePoint, const GeVector2d& dir1,
 {
 	GeVector2d offset = point - basePoint;
 	double determinant = dir1.crossProduct(dir2);
-	if (fabs(determinant) <= tol.equalPoint() * tol.equalPoint()) {
+	if (std::fabs(determinant) <= tol.equalPoint() * tol.equalPoint()) {
 		GePoint2d p1 = basePoint;
 		GePoint2d p2 = basePoint + dir1;
 		GePoint2d p3 = basePoint + dir2;

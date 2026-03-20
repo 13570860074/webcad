@@ -11,6 +11,7 @@
 #include "GeMatrix3d.h"
 #include "GeCircArc2d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 GeCircArc3d::GeCircArc3d() {
@@ -18,13 +19,7 @@ GeCircArc3d::GeCircArc3d() {
 }
 GeCircArc3d::GeCircArc3d(const GeCircArc3d& arc) {
 	GE_IMP_MEMORY_ENTITY(GeCircArc3d);
-
-	GE_IMP_CIRCARC3D(this->m_pImpl)->center = GE_IMP_CIRCARC3D(arc.m_pImpl)->center;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = GE_IMP_CIRCARC3D(arc.m_pImpl)->radius;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = GE_IMP_CIRCARC3D(arc.m_pImpl)->startAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = GE_IMP_CIRCARC3D(arc.m_pImpl)->endAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec = GE_IMP_CIRCARC3D(arc.m_pImpl)->refVec;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GE_IMP_CIRCARC3D(arc.m_pImpl)->normal;
+	this->set(arc.center(), arc.normal(), arc.refVec(), arc.radius(), arc.startAng(), arc.endAng());
 }
 GeCircArc3d::GeCircArc3d(const GePoint3d& cent, const GeVector3d& nrm, double radius) {
 	GE_IMP_MEMORY_ENTITY(GeCircArc3d);
@@ -173,7 +168,7 @@ bool GeCircArc3d::isClockWise(const GePoint3d& startPoint, const GePoint3d& seco
 	GeVector3d v1 = startPoint - secondPoint;
 	GeVector3d v2 = endPoint - secondPoint;
 	GeVector3d normal = v1.crossProduct(v2);
-	if (abs(normal.length()) < 0.000001) {
+	if (normal.isZeroLength()) {
 		return false;
 	}
 	normal.normalize();
@@ -243,6 +238,9 @@ bool GeCircArc3d::pointToBulge(const GePoint3d& startPoint, const GePoint3d& sec
 Adesk::Boolean GeCircArc3d::intersectWith(const GeLinearEnt3d& line, int& intn, GePoint3d& p1, GePoint3d& p2, const GeTol& tol) const {
 	GePoint3dArray points = this->intersectWith(line, tol);
 	intn = points.length();
+	if (intn == 0) {
+		return false;
+	}
 	if (points.length() == 1) {
 		p1.set(points[0].x, points[0].y, points[0].z);
 	}
@@ -255,6 +253,9 @@ Adesk::Boolean GeCircArc3d::intersectWith(const GeLinearEnt3d& line, int& intn, 
 Adesk::Boolean GeCircArc3d::intersectWith(const GeCircArc3d& arc, int& intn, GePoint3d& p1, GePoint3d& p2, const GeTol& tol) const {
 	GePoint3dArray points = this->intersectWith(arc, tol);
 	intn = points.length();
+	if (intn == 0) {
+		return false;
+	}
 	if (points.length() == 1) {
 		p1.set(points[0].x, points[0].y, points[0].z);
 	}
@@ -279,9 +280,12 @@ GePoint3dArray GeCircArc3d::intersectWith(const GeLinearEnt3d& line, const GeTol
 
 		// 获得垂点到圆心的距离
 		double dist = this->center().distanceTo(vertical);
-		if (abs(dist - this->radius()) < tol.equalPoint())
+		if (std::fabs(dist - this->radius()) < tol.equalPoint())
 		{
-			inters.append(vertical);
+			if (line.isOn(vertical, tol) == true && this->isOn(vertical, tol) == true)
+			{
+				inters.append(vertical);
+			}
 			break;
 		}
 		if (dist > this->radius() + tol.equalPoint())
@@ -291,32 +295,30 @@ GePoint3dArray GeCircArc3d::intersectWith(const GeLinearEnt3d& line, const GeTol
 
 		double e = sqrt(this->radius() * this->radius() - dist * dist);
 
-		GePoint3d point;
 		GeVector3d direction = line.direction();
+		if (direction.isZeroLength(tol))
+		{
+			break;
+		}
+		direction.normalize();
 
-
-		point.set(vertical.x, vertical.y, vertical.z);
-		point.x += e * direction.x;
-		point.y += e * direction.y;
+		GePoint3d point = vertical + direction * e;
 		if (line.isOn(point, tol) == true && this->isOn(point, tol) == true)
 		{
 			inters.append(point);
 		}
 
-		direction.negate();
-		point.set(vertical.x, vertical.y, vertical.z);
-		point.x += e * direction.x;
-		point.y += e * direction.y;
-		if (line.isOn(point, tol) == true && this->isOn(point, tol) == true)
+		GePoint3d point2 = vertical - direction * e;
+		if (line.isOn(point2, tol) == true && this->isOn(point2, tol) == true)
 		{
 			bool isAppend = true;
 			if (inters.length() > 0) {
-				if (point.isEqualTo(inters[0], tol) == true) {
+				if (point2.isEqualTo(inters[0], tol) == true) {
 					isAppend = false;
 				}
 			}
 			if (isAppend == true) {
-				inters.append(point);
+				inters.append(point2);
 			}
 		}
 
@@ -334,113 +336,106 @@ GePoint3dArray GeCircArc3d::intersectWith(const GeCircArc3d& arc, const GeTol& t
 
 	do {
 
-		if (this->normal().isParallelTo(arc.normal()) == true)
+		if (this->normal().isParallelTo(arc.normal(), tol) == true)
 		{
-			double val = this->center().distanceTo(arc.center());
-			// 判断两圆是否在范围外
-			if (val - arc.radius() - this->radius() >= tol.equalPoint())
+			GePlane planeThis(this->center(), this->normal());
+			if (planeThis.isOn(arc.center(), tol) == false)
 			{
 				break;
 			}
-			// 判断是否圆心重合
-			if (this->center().distanceTo(arc.center()) < tol.equalPoint())
+
+			double dist = this->center().distanceTo(arc.center());
+			double radiusThis = this->radius();
+			double radiusOther = arc.radius();
+
+			// 外离
+			if (dist > radiusThis + radiusOther + tol.equalPoint())
 			{
 				break;
 			}
-			// 判断两圆是否只存在一个交点
-			if (abs(val - arc.radius() - this->radius()) < tol.equalPoint())
+			// 内离
+			if (dist < std::fabs(radiusThis - radiusOther) - tol.equalPoint())
 			{
-				GeVector3d xAxis = arc.center() - this->center();
-				xAxis.normalize();
-				GePoint3d point1 = this->center() + xAxis * this->radius();
-				intersects.append(point1);
+				break;
+			}
+			// 圆心重合
+			if (dist < tol.equalPoint())
+			{
 				break;
 			}
 			
 			GeVector3d xAxis = arc.center() - this->center();
 			xAxis.normalize();
 			GeVector3d zAxis = this->normal();
-			xAxis.normalize();
 			GeVector3d yAxis = zAxis.crossProduct(xAxis);
 			yAxis.normalize();
 
-			GeMatrix3d mat;
-			mat.setToAlignCoordSys(this->center(), xAxis, yAxis, zAxis, this->center(), GeVector3d::kXAxis, GeVector3d::kYAxis, GeVector3d::kZAxis);
-
-			GePoint3d center1 = this->center();
-			GePoint3d center2 = arc.center();
-			center1.transformBy(mat);
-			center2.transformBy(mat);
-
-			double dist = center1.distanceTo(center2);
-			double b = (((arc.radius() * arc.radius()) - (this->radius() * this->radius())) / dist + dist) / 2.0;
-			double a = dist - b;
-			val = (this->radius() * this->radius()) - a * a;
-			if(val < tol.equalVector()){
+			double a = (radiusThis * radiusThis - radiusOther * radiusOther + dist * dist) / (2.0 * dist);
+			double h2 = radiusThis * radiusThis - a * a;
+			if (h2 < -tol.equalPoint()) {
 				break;
 			}
-			double h = sqrt(val);
+			double h = std::sqrt(h2 < 0.0 ? 0.0 : h2);
 
-			GePoint3d point1 = center1 + xAxis * a + yAxis * h;
-			GePoint3d point2 = center1 + xAxis * a - yAxis * h;
-			intersects.append(point1);
-			intersects.append(point2);
+			GePoint3d basePoint = this->center() + xAxis * a;
+			GePoint3d point1 = basePoint + yAxis * h;
+			GePoint3d point2 = basePoint - yAxis * h;
+			if (this->isOn(point1, tol) && arc.isOn(point1, tol))
+			{
+				intersects.append(point1);
+			}
+			if (this->isOn(point2, tol) && arc.isOn(point2, tol))
+			{
+				bool isDuplicate = false;
+				for (int i = 0; i < intersects.length(); ++i)
+				{
+					if (intersects[i].isEqualTo(point2, tol))
+					{
+						isDuplicate = true;
+						break;
+					}
+				}
+				if (isDuplicate == false)
+				{
+					intersects.append(point2);
+				}
+			}
 		}
 		else {
-
-		}
-
-	} while (false);
-
-
-	do
-	{
-		break;
-		if (this->isInside(arc.center(), tol) == false)
-		{
-			break;
-		}
-
-		double dist = this->center().distanceTo(arc.center());
-
-		double val = (dist * dist + this->radius() * this->radius() - arc.radius() * arc.radius()) / (2 * dist);
-
-		// 获得圆的两个交点
-		GePoint3dArray points;
-		if (abs(val * val - this->radius() * this->radius()) < tol.equalPoint())
-		{
-			GePoint3d target;
-			double t = this->radius() / dist;
-			target[0] = this->center()[0] * (1 - t) + arc.center()[0] * t;
-			target[1] = this->center()[1] * (1 - t) + arc.center()[1] * t;
-			points.append(target);
-		}
-		else if (val * val < this->radius() * this->radius()) // 相交
-		{
-			double h = pow((this->radius() * this->radius() - val * val), 0.5);
-
-			// c1-c2的单位方向向量计算
-			GeVector3d vector = this->center() - arc.center();
-			vector.normalize();
-
-			// 获得垂点
-			GePoint3d vertical = this->center() + vector * sqrt((this->radius() * this->radius() - h * h));
-
-			// 方向向量旋转PI/2
-			vector.rotateBy(PI / 2, GeVector3d::kZAxis);
-
-			// 获得第一点
-			points.append(vertical + vector * h);
-
-			// 获得第二点
-			points.append(vertical - vector * h);
-		}
-
-		for (int i = 0; i < points.length(); i++)
-		{
-			if (this->isOn(points[i], tol) == true)
+			GePlane planeThis(this->center(), this->normal());
+			GePlane planeOther(arc.center(), arc.normal());
+			GeLine3d line;
+			if (planeThis.intersectWith(planeOther, line, tol) == false)
 			{
-				intersects.append(points[i]);
+				break;
+			}
+
+			GePoint3dArray pointsThis = this->intersectWith(line, tol);
+			GePoint3dArray pointsOther = arc.intersectWith(line, tol);
+			for (int i = 0; i < pointsThis.length(); ++i)
+			{
+				for (int j = 0; j < pointsOther.length(); ++j)
+				{
+					if (pointsThis[i].isEqualTo(pointsOther[j], tol) == false)
+					{
+						continue;
+					}
+
+					bool isDuplicate = false;
+					for (int k = 0; k < intersects.length(); ++k)
+					{
+						if (intersects[k].isEqualTo(pointsThis[i], tol))
+						{
+							isDuplicate = true;
+							break;
+						}
+					}
+					if (isDuplicate == false)
+					{
+						intersects.append(pointsThis[i]);
+					}
+					break;
+				}
 			}
 		}
 
@@ -534,10 +529,26 @@ GeCircArc3d& GeCircArc3d::setCenter(const GePoint3d& cen) {
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::setAxes(const GeVector3d& normal, const GeVector3d& refVec) {
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec = refVec;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = normal;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.normalize();
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal.normalize();
+	GeVector3d nrm = normal;
+	if (nrm.isZeroLength()) {
+		nrm = GeVector3d::kZAxis;
+	}
+	nrm.normalize();
+
+	GeVector3d ref = refVec;
+	if (ref.isZeroLength()) {
+		ref = GeVector3d::kXAxis;
+	}
+	// 参考向量强制投影到圆所在平面
+	ref = ref.orthoProject(nrm);
+	if (ref.isZeroLength()) {
+		GeVector3d axis = (std::fabs(nrm.z) < 0.9) ? GeVector3d::kZAxis : GeVector3d::kXAxis;
+		ref = axis.crossProduct(nrm);
+	}
+	ref.normalize();
+
+	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec = ref;
+	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = nrm;
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::setRadius(double radius) {
@@ -545,41 +556,52 @@ GeCircArc3d& GeCircArc3d::setRadius(double radius) {
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::setAngles(double startAngle, double endAngle) {
-	if (startAngle < 0.0) {
-		startAngle = PI * 2 + startAngle;
+	double sweep = endAngle - startAngle;
+	double absSweep = std::fabs(sweep);
+	double start = std::fmod(startAngle, 2.0 * PI);
+	if (start < 0.0) {
+		start += 2.0 * PI;
 	}
-	if (endAngle < 0.0) {
-		endAngle = PI * 2 + endAngle;
+	double end = std::fmod(endAngle, 2.0 * PI);
+	if (end < 0.0) {
+		end += 2.0 * PI;
 	}
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = startAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = endAngle;
+
+	if (absSweep >= 2.0 * PI - GeContext::gTol.equalPoint())
+	{
+		end = start + (sweep >= 0.0 ? 2.0 * PI : -2.0 * PI);
+	}
+
+	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = start;
+	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = end;
 	return *this;
 }
 
 GeCircArc3d& GeCircArc3d::set(const GePoint3d& cent, const GeVector3d& nrm, double radius) {
-	GeVector3d refVec = GeVector3d::kXAxis;
-	if (nrm.isEqualTo(GeVector3d::kZAxis) == false) {
-		refVec = GeVector3d::kZAxis.crossProduct(nrm);
+	GeVector3d normal = nrm;
+	if (normal.isZeroLength()) {
+		normal = GeVector3d::kZAxis;
 	}
+	normal.normalize();
+
+	GeVector3d refVec = (std::fabs(normal.z) < 0.9) ? GeVector3d::kZAxis.crossProduct(normal) : GeVector3d::kXAxis.crossProduct(normal);
+	if (refVec.isZeroLength()) {
+		refVec = GeVector3d::kYAxis.crossProduct(normal);
+	}
+	refVec.normalize();
+
 	GE_IMP_CIRCARC3D(this->m_pImpl)->center = cent;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = radius;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = 0;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = PI * 2;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.set(refVec.x, refVec.y, refVec.z);
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.normalize();
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = nrm;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal.normalize();
+	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = normal;
+	this->setAngles(0.0, 2.0 * PI);
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::set(const GePoint3d& cent, const GeVector3d& nrm, const GeVector3d& refVec, double radius, double startAngle, double endAngle) {
 	GE_IMP_CIRCARC3D(this->m_pImpl)->center = cent;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = radius;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = startAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = endAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.set(refVec.x, refVec.y, refVec.z);
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.normalize();
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = nrm;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal.normalize();
+	this->setAxes(nrm, refVec);
+	this->setAngles(startAngle, endAngle);
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::set(const GePoint3d& startPoint, const GePoint3d& pnt, const GePoint3d& endPoint) {
@@ -589,21 +611,21 @@ GeCircArc3d& GeCircArc3d::set(const GePoint3d& startPoint, const GePoint3d& pnt,
 		return *this;
 	}
 
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec = (startPoint - center).normal();
-	if (GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.isEqualTo(GeVector3d(1, 0, 0)) == true) {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GeVector3d::kZAxis;
+	GeVector3d ref = (startPoint - center).normal();
+	GeVector3d normal = (startPoint - center).crossProduct(endPoint - center);
+	if (normal.isZeroLength()) {
+		normal = (startPoint - center).crossProduct(pnt - center);
 	}
-	else if (GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.isEqualTo(GeVector3d(-1, 0, 0)) == true) {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GeVector3d(0, 0, -1);
+	if (normal.isZeroLength()) {
+		normal = GeVector3d::kZAxis;
 	}
-	else {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.crossProduct(GeVector3d::kZAxis);
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal.normalize();
-	}
+	normal.normalize();
+	this->setAxes(normal, ref);
+
 	GE_IMP_CIRCARC3D(this->m_pImpl)->center = center;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = startPoint.distanceTo(center);
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = 0.0;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.angleToCCW((endPoint - center).normal(), this->normal());
+	double endAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.angleToCCW((endPoint - center).normal(), this->normal());
+	this->setAngles(0.0, endAngle);
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::set(const GePoint3d& startPoint, const GePoint3d& endPoint, double bulge) {
@@ -613,32 +635,29 @@ GeCircArc3d& GeCircArc3d::set(const GePoint3d& startPoint, const GePoint3d& endP
 	double angle = atan(bulge) * 4;
 	double adjacent = dist / tan(angle / 2.0);
 
+	GeVector3d normal = this->normal();
+	if (normal.isZeroLength()) {
+		normal = GeVector3d::kZAxis;
+	}
+	normal.normalize();
+
 	GeVector3d refVec = startPoint - midPoint;
 	refVec.normalize();
-	refVec.rotateBy(0 - PI / 2.0, this->normal());
+	refVec.rotateBy(0 - PI / 2.0, normal);
 
 	GePoint3d center = midPoint;
 	center += (refVec * adjacent);
 
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec = (startPoint - center).normal();
-	if (GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.isEqualTo(GeVector3d(1, 0, 0)) == true) {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GeVector3d::kZAxis;
-	}
-	else if (GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.isEqualTo(GeVector3d(-1, 0, 0)) == true) {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GeVector3d(0, 0, -1);
-	}
-	else {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.crossProduct(GeVector3d::kZAxis);
-		GE_IMP_CIRCARC3D(this->m_pImpl)->normal.normalize();
-	}
+	this->setAxes(normal, (startPoint - center).normal());
 	GE_IMP_CIRCARC3D(this->m_pImpl)->center = center;
 	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = center.distanceTo(startPoint);
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = 0.0;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.angleToCCW((endPoint - center).normal(), this->normal());
+	double startAngle = 0.0;
+	double endAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec.angleToCCW((endPoint - center).normal(), this->normal());
 	if (bulge < 0) {
-		GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle;
-		GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = PI * 2.0;
+		startAngle = endAngle;
+		endAngle = 2.0 * PI;
 	}
+	this->setAngles(startAngle, endAngle);
 	return *this;
 }
 GeCircArc3d& GeCircArc3d::set(const GeCurve3d& curve1, const GeCurve3d& curve2, double radius, double& param1, double& param2, Adesk::Boolean& success) {
@@ -654,12 +673,7 @@ GeCircArc3d& GeCircArc3d::set(const GeCurve3d& curve1, const GeCurve3d& curve2, 
 
 GeCircArc3d& GeCircArc3d::operator=(const GeCircArc3d& arc)
 {
-	GE_IMP_CIRCARC3D(this->m_pImpl)->center = GE_IMP_CIRCARC3D(arc.m_pImpl)->center;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->radius = GE_IMP_CIRCARC3D(arc.m_pImpl)->radius;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle = GE_IMP_CIRCARC3D(arc.m_pImpl)->startAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle = GE_IMP_CIRCARC3D(arc.m_pImpl)->endAngle;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->refVec = GE_IMP_CIRCARC3D(arc.m_pImpl)->refVec;
-	GE_IMP_CIRCARC3D(this->m_pImpl)->normal = GE_IMP_CIRCARC3D(arc.m_pImpl)->normal;
+	this->set(arc.center(), arc.normal(), arc.refVec(), arc.radius(), arc.startAng(), arc.endAng());
 	return *this;
 }
 
@@ -677,14 +691,7 @@ Ge::EntityId GeCircArc3d::type() const
 }
 GeCircArc3d* GeCircArc3d::copy() const
 {
-	GeCircArc3d* arc = new GeCircArc3d();
-	GE_IMP_CIRCARC3D(arc->m_pImpl)->center = GE_IMP_CIRCARC3D(this->m_pImpl)->center;
-	GE_IMP_CIRCARC3D(arc->m_pImpl)->radius = GE_IMP_CIRCARC3D(this->m_pImpl)->radius;
-	GE_IMP_CIRCARC3D(arc->m_pImpl)->startAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle;
-	GE_IMP_CIRCARC3D(arc->m_pImpl)->endAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle;
-	GE_IMP_CIRCARC3D(arc->m_pImpl)->refVec = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec;
-	GE_IMP_CIRCARC3D(arc->m_pImpl)->normal = GE_IMP_CIRCARC3D(this->m_pImpl)->normal;
-	return arc;
+	return new GeCircArc3d(*this);
 }
 bool GeCircArc3d::operator==(const GeCircArc3d& entity) const
 {
@@ -700,19 +707,50 @@ bool GeCircArc3d::isEqualTo(const GeCircArc3d& entity) const
 }
 bool GeCircArc3d::isEqualTo(const GeCircArc3d& entity, const GeTol& tol) const
 {
+	auto angleDiff = [](double a, double b) {
+		double diff = std::fmod(a - b, 2.0 * PI);
+		if (diff < 0.0)
+		{
+			diff += 2.0 * PI;
+		}
+		if (diff > PI)
+		{
+			diff = 2.0 * PI - diff;
+		}
+		return diff;
+	};
+
 	if (this->center().isEqualTo(entity.center(), tol) == false)
 	{
 		return false;
 	}
-	if (abs(this->radius() - entity.radius()) > tol.equalPoint())
+	if (std::fabs(this->radius() - entity.radius()) > tol.equalPoint())
 	{
 		return false;
 	}
-	if (abs(this->startAng() - entity.startAng()) > tol.equalPoint())
+	if (this->normal().isEqualTo(entity.normal(), tol) == false)
 	{
 		return false;
 	}
-	if (abs(this->endAng() - entity.endAng()) > tol.equalPoint())
+	bool thisClosed = this->isClosed(tol);
+	bool entityClosed = entity.isClosed(tol);
+	if (thisClosed != entityClosed)
+	{
+		return false;
+	}
+	if (thisClosed == true)
+	{
+		if (this->refVec().isEqualTo(entity.refVec(), tol) == false)
+		{
+			return false;
+		}
+		return true;
+	}
+	if (angleDiff(this->startAng(), entity.startAng()) > tol.equalPoint())
+	{
+		return false;
+	}
+	if (angleDiff(this->endAng(), entity.endAng()) > tol.equalPoint())
 	{
 		return false;
 	}
@@ -776,22 +814,9 @@ GeCircArc3d& GeCircArc3d::rotateBy(double angle, const GeVector3d& vec, const Ge
 }
 GeCircArc3d& GeCircArc3d::mirror(const GePlane& plane)
 {
-
-	this->setCenter(this->center().mirror(plane));
-
-	GePoint3d startPoint = this->startPoint();
-	startPoint.mirror(plane);
-	GeVector3d vector = startPoint - this->center();
-	vector.normalize();
-	double startAngle = vector.angleToCCW(this->refVec());
-
-	GePoint3d endPoint = this->endPoint();
-	endPoint.mirror(plane);
-	vector = endPoint - this->center();
-	vector.normalize();
-	double endAngle = vector.angleToCCW(this->refVec());
-
-	this->setAngles(startAngle, endAngle);
+	GeMatrix3d mat;
+	mat.setToMirroring(plane);
+	this->transformBy(mat);
 
 	return *this;
 }
@@ -813,37 +838,8 @@ bool GeCircArc3d::isOn(const GePoint3d& pnt) const
 }
 bool GeCircArc3d::isOn(const GePoint3d& pnt, const GeTol& tol) const
 {
-	bool isValue = false;
-
-	do
-	{
-		if (abs(this->center().distanceTo(pnt) - this->radius()) > tol.equalPoint())
-		{
-			break;
-		}
-		if (abs(this->endAng() - this->startAng() - PI * 2) < tol.equalPoint())
-		{
-			isValue = true;
-			break;
-		}
-
-		GePoint3d startPoint(this->center().x + this->radius(), this->center().y, this->center().z);
-		startPoint.rotateBy(this->startAng(), GeVector3d::kZAxis);
-
-		GePoint3d endPoint(this->center().x + this->radius(), this->center().y, this->center().z);
-		endPoint.rotateBy(this->endAng(), GeVector3d::kZAxis);
-
-		GePoint3d midPoint(this->center().x + this->radius(), this->center().y, this->center().z);
-		endPoint.rotateBy(this->startAng() + (this->endAng() - this->startAng()) / 2.0, GeVector3d::kZAxis);
-
-		if (isClockWise(startPoint, midPoint, endPoint) == isClockWise(startPoint, pnt, endPoint))
-		{
-			isValue = true;
-		}
-
-	} while (false);
-
-	return isValue;
+	double param = 0.0;
+	return this->isOn(pnt, param, tol);
 }
 void GeCircArc3d::getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const
 {
@@ -860,8 +856,8 @@ void GeCircArc3d::getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& p
 	GeVector3d vector = point - this->center();
 	double angle = vector.angleToCCW(this->refVec(), this->normal());
 
-	piece1 = new GeCircArc3d(this->center(), this->refVec(), this->normal(), this->radius(), this->startAng(), angle);
-	piece2 = new GeCircArc3d(this->center(), this->refVec(), this->normal(), this->radius(), angle, this->endAng());
+	piece1 = new GeCircArc3d(this->center(), this->normal(), this->refVec(), this->radius(), this->startAng(), angle);
+	piece2 = new GeCircArc3d(this->center(), this->normal(), this->refVec(), this->radius(), angle, this->endAng());
 }
 bool GeCircArc3d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExplodedCurve) const
 {
@@ -873,14 +869,24 @@ bool GeCircArc3d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExp
 GeBoundBlock3d GeCircArc3d::boundBlock() const
 {
 	GeInterval range;
-	range.set(this->paramOf(this->startPoint()), this->paramOf(this->endPoint()));
+	double start = this->startAng();
+	double end = this->endAng();
+	if (this->isClosed(GeContext::gTol) == true)
+	{
+		end = start + 2.0 * PI;
+	}
+	else if (end < start)
+	{
+		end += 2.0 * PI;
+	}
+	range.set(start, end);
 	return this->boundBlock(range);
 }
 GeBoundBlock3d GeCircArc3d::boundBlock(const GeInterval& range) const
 {
 
 	GeBoundBlock3d boundBlock;
-	if (abs(range.upperBound() - range.lowerBound() - PI * 2.0) < range.tolerance())
+	if (std::fabs(range.upperBound() - range.lowerBound() - PI * 2.0) < range.tolerance())
 	{
 
 		GePoint3d basePoint(this->center());
@@ -928,7 +934,17 @@ GeBoundBlock3d GeCircArc3d::boundBlock(const GeInterval& range) const
 GeBoundBlock3d GeCircArc3d::orthoBoundBlock() const
 {
 	GeInterval range;
-	range.set(this->paramOf(this->startPoint()), this->paramOf(this->endPoint()));
+	double start = this->startAng();
+	double end = this->endAng();
+	if (this->isClosed(GeContext::gTol) == true)
+	{
+		end = start + 2.0 * PI;
+	}
+	else if (end < start)
+	{
+		end += 2.0 * PI;
+	}
+	range.set(start, end);
 	return this->orthoBoundBlock(range);
 }
 GeBoundBlock3d GeCircArc3d::orthoBoundBlock(const GeInterval& range) const
@@ -1017,14 +1033,16 @@ double GeCircArc3d::length(double fromParam, double toParam) const
 }
 double GeCircArc3d::length(double fromParam, double toParam, double tol) const
 {
-	if (fromParam < 0) {
-		fromParam = PI * 2 - fromParam;
+	fromParam = std::fmod(fromParam, 2.0 * PI);
+	toParam = std::fmod(toParam, 2.0 * PI);
+	if (fromParam < 0.0) {
+		fromParam += 2.0 * PI;
 	}
-	if (toParam < 0) {
-		toParam = PI * 2 - toParam;
+	if (toParam < 0.0) {
+		toParam += 2.0 * PI;
 	}
 	if (toParam < fromParam) {
-		toParam += 2 * PI;
+		toParam += 2.0 * PI;
 	}
 	return this->radius() * (toParam - fromParam);
 }
@@ -1034,7 +1052,7 @@ double GeCircArc3d::area() const
 }
 double GeCircArc3d::area(const GeTol& tol) const
 {
-	if (this->isClosed() == false)
+	if (this->isClosed(tol) == false)
 	{
 		return 0.0;
 	}
@@ -1047,10 +1065,15 @@ double GeCircArc3d::paramAtLength(double datumParam, double length) const
 double GeCircArc3d::paramAtLength(double datumParam, double length, double tol) const
 {
 	double param = 0.0;
+	if (std::fabs(this->radius()) <= tol)
+	{
+		return datumParam;
+	}
 
 	param = datumParam + (length / (2 * PI * this->radius()) * (2 * PI));
-	if (param > PI * 2) {
-		param = param - int(param / (PI * 2)) * PI * 2;
+	param = std::fmod(param, 2.0 * PI);
+	if (param < 0.0) {
+		param += 2.0 * PI;
 	}
 	return param;
 }
@@ -1111,40 +1134,42 @@ GePoint3d GeCircArc3d::closestPointTo(const GePoint3d& pnt) const
 GePoint3d GeCircArc3d::closestPointTo(const GePoint3d& pnt, const GeTol& tol) const
 {
 	GePoint3d closest;
+	GePoint3dArray points;
 
-	do
+	// 获得点在平面上的投影
+	GePoint3d point = pnt.orthoProject(GePlane(this->center(), this->normal()));
+
+	// 获得投影射线和圆弧的交点
+	GePoint3dArray intersects = this->intersectWith(GeRay3d(this->center(), point), tol);
+	if (intersects.length() > 0)
 	{
+		points.append(intersects[0]);
+	}
 
-		GePoint3dArray points;
-
-		// 获得点在平面上的投影
-		GePoint3d point = pnt.orthoProject(GePlane(this->center(), this->normal()));
-
-		// 获得投影射线和圆弧的交点
-		GePoint3dArray intersects = this->intersectWith(GeRay3d(this->center(), point), tol);
-		if (intersects.length() > 0)
+	// 若投影方向未命中圆弧，则退化为比较两端点距离。
+	if (points.length() == 0)
+	{
+		GePoint3d startPoint = this->startPoint();
+		GePoint3d endPoint = this->endPoint();
+		closest = startPoint;
+		if (pnt.distanceTo(endPoint) < pnt.distanceTo(startPoint))
 		{
-			points.append(intersects[0]);
+			closest = endPoint;
 		}
+		return closest;
+	}
 
-		// 取最近点
-		double dist = 0.0;
-		for (int i = 0; i < points.length(); i++)
+	// 取最近点
+	double dist = points[0].distanceTo(pnt);
+	closest = points[0];
+	for (int i = 1; i < points.length(); i++)
+	{
+		if (points[i].distanceTo(pnt) < dist)
 		{
-			if (i == 0)
-			{
-				dist = points[i].distanceTo(pnt);
-				closest = points[i];
-				continue;
-			}
-			if (points[i].distanceTo(pnt) < dist)
-			{
-				dist = points[i].distanceTo(pnt);
-				closest = points[i];
-			}
+			dist = points[i].distanceTo(pnt);
+			closest = points[i];
 		}
-
-	} while (false);
+	}
 
 	return closest;
 }
@@ -1702,7 +1727,7 @@ bool GeCircArc3d::isOn(const GePoint3d& pnt, double& param, const GeTol& tol) co
 	{
 		return false;
 	}
-	if (fabs(v.length() - this->radius()) > tol.equalPoint())
+	if (std::fabs(v.length() - this->radius()) > tol.equalPoint())
 	{
 		return false;
 	}
@@ -1722,7 +1747,33 @@ bool GeCircArc3d::isOn(double param) const
 }
 bool GeCircArc3d::isOn(double param, const GeTol& tol) const
 {
-	return this->isOn(this->evalPoint(param), tol);
+	if (this->isClosed(tol) == true)
+	{
+		return true;
+	}
+	auto normalizeAngle = [](double value) {
+		double result = std::fmod(value, 2.0 * PI);
+		if (result < 0.0)
+		{
+			result += 2.0 * PI;
+		}
+		return result;
+	};
+
+	double start = normalizeAngle(this->startAng());
+	double end = normalizeAngle(this->endAng());
+	double angle = normalizeAngle(param);
+
+	if (end < start)
+	{
+		end += 2.0 * PI;
+	}
+	if (angle < start)
+	{
+		angle += 2.0 * PI;
+	}
+
+	return angle >= start - tol.equalPoint() && angle <= end + tol.equalPoint();
 }
 GECURVE3D_METHODS_GETCLOSESTPOINTTO(GeCircArc3d);
 double GeCircArc3d::paramOf(const GePoint3d& pnt) const
@@ -1748,18 +1799,14 @@ void GeCircArc3d::getTrimmedOffset(double distance, const GeVector3d& planeNorma
 }
 void GeCircArc3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, GeVoidPointerArray& offsetCurveList, Ge::OffsetCrvExtType extensionType, const GeTol& tol) const
 {
-
-	if (abs(this->radius() - distance) < tol.equalPoint())
+	double newRadius = this->radius() + distance;
+	if (newRadius <= tol.equalPoint())
 	{
 		return;
 	}
 
 	GeCircArc3d* circArc = new GeCircArc3d();
-	GE_IMP_CIRCARC3D(circArc->m_pImpl)->refVec = GE_IMP_CIRCARC3D(this->m_pImpl)->refVec;
-	GE_IMP_CIRCARC3D(circArc->m_pImpl)->center = this->center();
-	GE_IMP_CIRCARC3D(circArc->m_pImpl)->radius = this->radius() + distance;
-	GE_IMP_CIRCARC3D(circArc->m_pImpl)->startAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->startAngle;
-	GE_IMP_CIRCARC3D(circArc->m_pImpl)->endAngle = GE_IMP_CIRCARC3D(this->m_pImpl)->endAngle;
+	circArc->set(this->center(), this->normal(), this->refVec(), newRadius, this->startAng(), this->endAng());
 
 	offsetCurveList.append(circArc);
 }
@@ -1769,7 +1816,20 @@ bool GeCircArc3d::isClosed() const
 }
 bool GeCircArc3d::isClosed(const GeTol& tol) const
 {
-	if (abs(this->endAng() - this->startAng()) - PI * 2 < tol.equalPoint())
+	double absSweep = std::fabs(this->endAng() - this->startAng());
+	if (absSweep < 2.0 * PI - tol.equalPoint())
+	{
+		return false;
+	}
+
+	double turns = absSweep / (2.0 * PI);
+	double nearestTurns = std::floor(turns + 0.5);
+	if (nearestTurns < 1.0)
+	{
+		nearestTurns = 1.0;
+	}
+
+	if (std::fabs(absSweep - nearestTurns * 2.0 * PI) <= tol.equalPoint())
 	{
 		return true;
 	}

@@ -1,5 +1,6 @@
 #include "GeVector2d.h"
 #include "GeMatrix2d.h"
+#include <cmath>
 
 
 const GeVector2d GeVector2d::kIdentity = GeVector2d(0, 0); // Additive identity vector.
@@ -41,7 +42,7 @@ double GeVector2d::angleTo(const GeVector2d& vec) const
 	double v1 = sqrt((vec.x - this->x) * (vec.x - this->x) + (vec.y - this->y) * (vec.y - this->y));
 	double v2 = sqrt(this->x * this->x + this->y * this->y);
 	double v3 = sqrt(vec.x * vec.x + vec.y * vec.y);
-	if (abs(v1 - (v2 * v3)) < 0.000001)
+	if (std::fabs(v1 - (v2 * v3)) < 0.000001)
 	{
 		return 0.0;
 	}
@@ -103,7 +104,7 @@ bool GeVector2d::isParallelTo(const GeVector2d& vect) const {
 bool GeVector2d::isParallelTo(const GeVector2d& vec,const GeTol& tol) const
 {
 	double Angle = this->angleTo(vec);
-	if (abs(Angle) < tol.equalVector() || abs(Angle - PI) < tol.equalVector()) {
+	if (std::fabs(Angle) < tol.equalVector() || std::fabs(Angle - PI) < tol.equalVector()) {
 		return true;
 	}
 	return false;
@@ -125,7 +126,7 @@ bool GeVector2d::isPerpendicularTo(const GeVector2d& vect) const {
 bool GeVector2d::isPerpendicularTo(const GeVector2d& vec,const GeTol& tol) const
 {
 	double Angle = this->angleTo(vec);
-	if (abs(Angle - PI / 2) < tol.equalVector() || abs(Angle - PI / 2 * 3) < tol.equalVector())
+	if (std::fabs(Angle - PI / 2) < tol.equalVector() || std::fabs(Angle - PI / 2 * 3) < tol.equalVector())
 	{
 		return true;
 	}
@@ -136,10 +137,10 @@ bool GeVector2d::isEqualTo(const GeVector2d& vect) const {
 }
 bool GeVector2d::isEqualTo(const GeVector2d& vec, const GeTol& tol) const
 {
-	if (abs(vec.x - this->x) > tol.equalVector()) {
+	if (std::fabs(vec.x - this->x) > tol.equalVector()) {
 		return false;
 	}
-	if (abs(vec.y - this->y) > tol.equalVector()) {
+	if (std::fabs(vec.y - this->y) > tol.equalVector()) {
 		return false;
 	}
 	return true;

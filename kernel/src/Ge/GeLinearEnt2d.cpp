@@ -2,6 +2,7 @@
 #include "GeLine2d.h"
 #include "GeMatrix2d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 
@@ -27,7 +28,7 @@ GePoint2d GeLinearEnt2d::vertical(const GePoint2d& pt, const GeLinearEnt2d& line
 
 	double dx = begin.x - end.x;
 	double dy = begin.y - end.y;
-	if (abs(dx) < tol.equalPoint() && abs(dy) < tol.equalPoint())
+	if (std::fabs(dx) < tol.equalPoint() && std::fabs(dy) < tol.equalPoint())
 	{
 		retVal = begin;
 		return retVal;
@@ -92,7 +93,7 @@ bool GeLinearEnt2d::intersectWith(const GeLinearEnt2d& line, GePoint2d& intPnt, 
 	GeVector2d otherVector = GE_IMP_LINEARENT2D(line.m_pImpl)->vector;
 
 	double denominator = thisVector.crossProduct(otherVector);
-	if (abs(denominator) <= tol.equalVector())
+	if (std::fabs(denominator) <= tol.equalVector())
 	{
 		return false;
 	}

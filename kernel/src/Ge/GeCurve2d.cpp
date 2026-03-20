@@ -284,7 +284,7 @@ double GeCurve2d::paramAtLength(double datumParam, double length) const {
 	return this->paramAtLength(datumParam, length, GeContext::gTol.equalPoint());
 }
 double GeCurve2d::paramAtLength(double datumParam, double length, double tol) const {
-	if (length == 0.0) {
+	if (std::fabs(length) <= tol) {
 		return datumParam;
 	}
 

@@ -6,6 +6,7 @@
 #include "GePointOnSurface.h"
 #include "GeBoundedPlane.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 const GePlane GePlane::kXYPlane = GePlane(GePoint3d::kOrigin, GeVector3d::kZAxis);
@@ -61,7 +62,7 @@ bool GePlane::intersectWith(const GeLinearEnt3d& linEnt, GePoint3d& resultPnt, c
 	double denom = normal.dotProduct(direction);
 	double numer = normal.dotProduct(offset);
 
-	if (fabs(denom) <= tol.equalVector()) {
+	if (std::fabs(denom) <= tol.equalVector()) {
 		return false;
 	}
 
@@ -79,28 +80,16 @@ bool GePlane::intersectWith(const GePlane& otherPln, GeLine3d& resultLine, const
 	GeVector3d normal0 = this->normal();
 	GeVector3d normal1 = otherPln.normal();
 	GeVector3d direction = normal0.crossProduct(normal1);
-	if (direction.length() <= tol.equalVector()) {
+	double dirLenSq = direction.lengthSqrd();
+	if (dirLenSq <= tol.equalVector() * tol.equalVector()) {
 		return false;
 	}
 
-	double coef0 = 0.0;
-	double coef1 = 0.0;
-	this->getCoefficients(normal0.x, normal0.y, normal0.z, coef0);
-	otherPln.getCoefficients(normal1.x, normal1.y, normal1.z, coef1);
-
-	double n00 = normal0.lengthSqrd();
-	double n01 = normal0.dotProduct(normal1);
-	double n11 = normal1.lengthSqrd();
-	double det = n00 * n11 - n01 * n01;
-	if (fabs(det) <= tol.equalPoint()) {
-		return false;
-	}
-
-	double invDet = 1.0 / det;
-	double c0 = (n11 * coef0 - n01 * coef1) * invDet;
-	double c1 = (n00 * coef1 - n01 * coef0) * invDet;
-	GeVector3d tmp = normal0 * c0 + normal1 * c1;
-	GePoint3d point(-tmp.x, -tmp.y, -tmp.z);
+	double d0 = -normal0.dotProduct(this->pointOnPlane() - GePoint3d::kOrigin);
+	double d1 = -normal1.dotProduct(otherPln.pointOnPlane() - GePoint3d::kOrigin);
+	GeVector3d temp = normal0 * d1 - normal1 * d0;
+	GeVector3d pointVec = temp.crossProduct(direction) / dirLenSq;
+	GePoint3d point(pointVec.x, pointVec.y, pointVec.z);
 	resultLine.set(point, direction);
 	return true;
 }
@@ -171,41 +160,27 @@ bool GePlane::intersectWith(const GeBoundedPlane& bndPln, GeLineSeg3d& resultLin
 	return false;
 }
 GePlane& GePlane::set(const GePoint3d& pnt, const GeVector3d& normal) {
-
 	GE_IMP_PLANE(this->m_pImpl)->origin.set(pnt.x, pnt.y, pnt.z);
-	GE_IMP_PLANE(this->m_pImpl)->normal.set(normal.x, normal.y, normal.z);
-	GE_IMP_PLANE(this->m_pImpl)->normal.normalize();
 
-	//如果方向和z轴平行
-	if (normal.isPerpendicularTo(GeVector3d::kZAxis) == true) {
-		GE_IMP_PLANE(this->m_pImpl)->xAxis = GeVector3d::kXAxis;
-		GE_IMP_PLANE(this->m_pImpl)->yAxis = GeVector3d::kYAxis;
-		return *this;
+	GeVector3d planeNormal = normal;
+	if (planeNormal.isZeroLength()) {
+		planeNormal = GeVector3d::kZAxis;
 	}
+	planeNormal.normalize();
+	GE_IMP_PLANE(this->m_pImpl)->normal = planeNormal;
 
-	//获得法向和Z轴的夹角
-	double angle = this->normal().angle(GeVector3d::kZAxis);
-
-	//法向和Z轴叉乘
-	GeVector3d cross = this->normal().crossProduct(GeVector3d::kZAxis);
-
-	//构建一个旋转矩阵
-	GeMatrix3d mat;
-	mat.setToRotation(angle, cross);
-
-	//判断旋转矩阵是否正确
-	GeVector3d vec = GeVector3d::kZAxis;
-	vec.transformBy(mat);
-	if (vec.isEqualTo(normal.normal()) == false) {
-		mat.setToRotation(0 - angle, cross);
+	GeVector3d refAxis = (std::fabs(planeNormal.z) < 0.9) ? GeVector3d::kZAxis : GeVector3d::kXAxis;
+	GeVector3d xAxis = refAxis.crossProduct(planeNormal);
+	if (xAxis.isZeroLength()) {
+		refAxis = GeVector3d::kYAxis;
+		xAxis = refAxis.crossProduct(planeNormal);
 	}
+	xAxis.normalize();
+	GeVector3d yAxis = planeNormal.crossProduct(xAxis);
+	yAxis.normalize();
 
-	//设置xy轴
-	GE_IMP_PLANE(this->m_pImpl)->xAxis = GeVector3d::kXAxis;
-	GE_IMP_PLANE(this->m_pImpl)->xAxis.transformBy(mat);
-
-	GE_IMP_PLANE(this->m_pImpl)->yAxis = GeVector3d::kYAxis;
-	GE_IMP_PLANE(this->m_pImpl)->yAxis.transformBy(mat);
+	GE_IMP_PLANE(this->m_pImpl)->xAxis = xAxis;
+	GE_IMP_PLANE(this->m_pImpl)->yAxis = yAxis;
 
 	return *this;
 }
@@ -215,112 +190,58 @@ GePlane& GePlane::set(const GePoint3d& pntU, const GePoint3d& org, const GePoint
 	GeVector3d v2 = GeVector3d(pntV.x - org.x, pntV.y - org.y, pntV.z - org.z);
 
 	GeVector3d normal = v1.crossProduct(v2);
+	if (normal.isZeroLength()) {
+		return this->set(org, GeVector3d::kZAxis);
+	}
 	normal.normalize();
+	v1.normalize();
+	GeVector3d yAxis = normal.crossProduct(v1);
+	yAxis.normalize();
 
 	GE_IMP_PLANE(this->m_pImpl)->origin = org;
 	GE_IMP_PLANE(this->m_pImpl)->xAxis = v1;
-	GE_IMP_PLANE(this->m_pImpl)->yAxis = v2;
+	GE_IMP_PLANE(this->m_pImpl)->yAxis = yAxis;
 	GE_IMP_PLANE(this->m_pImpl)->normal = normal;
 	return *this;
 }
 GePlane& GePlane::set(double a, double b, double c, double d) {
-
-
-	double aAbs = a;
-	if (aAbs < 0) aAbs = -aAbs;
-	double bAbs = b;
-	if (bAbs < 0) bAbs = -bAbs;
-	double cAbs = c;
-	if (cAbs < 0) cAbs = -cAbs;
-	if (bAbs <= aAbs && bAbs <= cAbs) {
-		if (aAbs > cAbs)
-		{
-			GE_IMP_PLANE(this->m_pImpl)->origin.set(-d / a, 0.0, 0.0);
-			GE_IMP_PLANE(this->m_pImpl)->normal.set(a, b, c);
-			GE_IMP_PLANE(this->m_pImpl)->xAxis.set(-c, 0.0, a);
-			GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
-
-			//this->set(GePoint3d(-d / a, 0.0, 0.0), GeVector3d(a, b, c));
-			//this->set(GePoint3d(-d / a, 0.0, 0.0), GeVector3d(a, b, c), GeVector3d(-c, 0.0, a));
-		}
-		else {
-			GE_IMP_PLANE(this->m_pImpl)->origin.set(0.0, 0.0, -d / c);
-			GE_IMP_PLANE(this->m_pImpl)->normal.set(a, b, c);
-			GE_IMP_PLANE(this->m_pImpl)->xAxis.set(c, 0.0, -a);
-			GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
-
-			//this->set(GePoint3d(0.0, 0.0, -d / c), GeVector3d(a, b, c));
-			//this->set(GePoint3d(0.0, 0.0, -d / c), GeVector3d(a, b, c), GeVector3d(c, 0.0, -a));
-		}
+	GeVector3d normal(a, b, c);
+	if (normal.isZeroLength()) {
+		return this->set(GePoint3d::kOrigin, GeVector3d::kZAxis);
 	}
-	else if (aAbs <= bAbs && aAbs <= cAbs) {
-		if (bAbs > cAbs) {
-			GE_IMP_PLANE(this->m_pImpl)->origin.set(0.0, -d / b, 0.0);
-			GE_IMP_PLANE(this->m_pImpl)->normal.set(a, b, c);
-			GE_IMP_PLANE(this->m_pImpl)->xAxis.set(0.0, -c, b);
-			GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
 
-			//this->set(GePoint3d(0.0, -d / b, 0.0), GeVector3d(a, b, c));
-			//this->set(GePoint3d(0.0, -d / b, 0.0), GeVector3d(a, b, c), GeVector3d(0.0, -c, b));
-		}
-		else {
-			GE_IMP_PLANE(this->m_pImpl)->origin.set(0.0, 0.0, -d / c);
-			GE_IMP_PLANE(this->m_pImpl)->normal.set(a, b, c);
-			GE_IMP_PLANE(this->m_pImpl)->xAxis.set(0.0, c, -b);
-			GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
-
-			//this->set(GePoint3d(0.0, 0.0, -d / c), GeVector3d(a, b, c));
-			//this->set(GePoint3d(0.0, 0.0, -d / c), GeVector3d(a, b, c), GeVector3d(0.0, c, -b));
-		}
+	double ax = std::fabs(a);
+	double by = std::fabs(b);
+	double cz = std::fabs(c);
+	GePoint3d pointOnPlane(0.0, 0.0, 0.0);
+	if (ax >= by && ax >= cz) {
+		pointOnPlane.x = -d / a;
+	}
+	else if (by >= ax && by >= cz) {
+		pointOnPlane.y = -d / b;
 	}
 	else {
-		if (aAbs > bAbs) {
-			GE_IMP_PLANE(this->m_pImpl)->origin.set(-d / a, 0.0, 0.0);
-			GE_IMP_PLANE(this->m_pImpl)->normal.set(a, b, c);
-			GE_IMP_PLANE(this->m_pImpl)->xAxis.set(-b, a, 0.0);
-			GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
-
-			//this->set(GePoint3d(-d / a, 0.0, 0.0), GeVector3d(a, b, c));
-			//this->set(GePoint3d(-d / a, 0.0, 0.0), GeVector3d(a, b, c), GeVector3d(-b, a, 0.0));
-		}
-		else {
-			GE_IMP_PLANE(this->m_pImpl)->origin.set(0.0, -d / b, 0.0);
-			GE_IMP_PLANE(this->m_pImpl)->normal.set(a, b, c);
-			GE_IMP_PLANE(this->m_pImpl)->xAxis.set(b, -a, 0.0);
-			GE_IMP_PLANE(this->m_pImpl)->yAxis = GE_IMP_PLANE(this->m_pImpl)->xAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
-
-			//this->set(GePoint3d(0.0, -d / b, 0.0), GeVector3d(a, b, c));
-			//this->set(GePoint3d(0.0, -d / b, 0.0), GeVector3d(a, b, c), GeVector3d(b, -a, 0.0));
-		}
+		pointOnPlane.z = -d / c;
 	}
 
-	//法向标准化
-	GE_IMP_PLANE(this->m_pImpl)->normal.normalize();
-	GE_IMP_PLANE(this->m_pImpl)->xAxis.normalize();
-	GE_IMP_PLANE(this->m_pImpl)->yAxis.normalize();
-
-	//计算出d值
-	a = this->normal().x;
-	b = this->normal().y;
-	c = this->normal().z;
-	GePoint3d point = this->pointOnPlane();
-	d = -(a * point.x + b * point.y + c * point.z);
-
-	//设置原点
-	GE_IMP_PLANE(this->m_pImpl)->origin = GePoint3d::kOrigin;
-	GE_IMP_PLANE(this->m_pImpl)->origin.translation(this->normal() * -d);
-
-	this->set(GE_IMP_PLANE(this->m_pImpl)->origin, this->normal());
-
-	return *this;
+	return this->set(pointOnPlane, normal);
 }
 GePlane& GePlane::set(const GePoint3d& org, const GeVector3d& uAxis, const GeVector3d& vAxis) {
 
-	GeVector3d normal = uAxis.crossProduct(vAxis);
+	GeVector3d xAxis = uAxis;
+	GeVector3d yAxis = vAxis;
+	GeVector3d normal = xAxis.crossProduct(yAxis);
+	if (xAxis.isZeroLength() || yAxis.isZeroLength() || normal.isZeroLength()) {
+		return this->set(org, GeVector3d::kZAxis);
+	}
+	xAxis.normalize();
+	normal.normalize();
+	yAxis = normal.crossProduct(xAxis);
+	yAxis.normalize();
 
 	GE_IMP_PLANE(this->m_pImpl)->origin = org;
-	GE_IMP_PLANE(this->m_pImpl)->xAxis = uAxis;
-	GE_IMP_PLANE(this->m_pImpl)->yAxis = vAxis;
+	GE_IMP_PLANE(this->m_pImpl)->xAxis = xAxis;
+	GE_IMP_PLANE(this->m_pImpl)->yAxis = yAxis;
 	GE_IMP_PLANE(this->m_pImpl)->normal = normal;
 	return *this;
 }
@@ -471,7 +392,11 @@ GePoint2d GePlane::paramOf(const GePoint3d& pnt, const GeTol& tol) const {
 	GeVector3d vCrossProdNormal = GE_IMP_PLANE(this->m_pImpl)->yAxis.crossProduct(GE_IMP_PLANE(this->m_pImpl)->normal);
 	GeVector3d normalCrossProdU = GE_IMP_PLANE(this->m_pImpl)->normal.crossProduct(GE_IMP_PLANE(this->m_pImpl)->xAxis);
 	double tripleProduct = vCrossProdNormal.dotProduct(GE_IMP_PLANE(this->m_pImpl)->xAxis);
-	if (fabs(tripleProduct) <= 1.0e-300)
+	double tripleTol = tol.equalVector() * tol.equalVector() * tol.equalVector();
+	if (tripleTol < 1.0e-300) {
+		tripleTol = 1.0e-300;
+	}
+	if (std::fabs(tripleProduct) <= tripleTol)
 	{
 		return GePoint2d();
 	}

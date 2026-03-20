@@ -1,6 +1,7 @@
 #include "GePointOnCurve3d.h"
 #include "GeCurve3d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 GePointOnCurve3d::GePointOnCurve3d() {
@@ -86,7 +87,7 @@ bool GePointOnCurve3d::isEqualTo(const GePointOnCurve3d& entity) const {
 	return this->isEqualTo(entity, GeContext::gTol);
 }
 bool GePointOnCurve3d::isEqualTo(const GePointOnCurve3d& entity, const GeTol& tol) const {
-	if (abs(this->parameter() - entity.parameter()) > tol.equalPoint()) {
+	if (std::fabs(this->parameter() - entity.parameter()) > tol.equalPoint()) {
 		return false;
 	}
 	if (this->curve() != entity.curve()) {

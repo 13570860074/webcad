@@ -8,6 +8,44 @@
 #include "GeInterval.h"
 #include "GeBoundBlock2d.h"
 #include "GeImpl.h"
+#include <cmath>
+
+namespace {
+double normalize_angle_2pi(double angle)
+{
+	angle = std::fmod(angle, 2.0 * PI);
+	if (angle < 0.0) {
+		angle += 2.0 * PI;
+	}
+	return angle;
+}
+
+double periodic_angle_diff(double angle1, double angle2)
+{
+	double diff = normalize_angle_2pi(angle1) - normalize_angle_2pi(angle2);
+	diff = std::fmod(diff + PI, 2.0 * PI);
+	if (diff < 0.0) {
+		diff += 2.0 * PI;
+	}
+	return diff - PI;
+}
+
+bool angle_in_ccw_sweep(double startAng, double endAng, double angle, double tol)
+{
+	startAng = normalize_angle_2pi(startAng);
+	endAng = normalize_angle_2pi(endAng);
+	angle = normalize_angle_2pi(angle);
+
+	if (endAng < startAng) {
+		endAng += 2.0 * PI;
+	}
+	if (angle < startAng) {
+		angle += 2.0 * PI;
+	}
+
+	return angle >= startAng - tol && angle <= endAng + tol;
+}
+}
 
 
 
@@ -121,7 +159,7 @@ bool GeCircArc2d::pointToCenter(const GePoint2d& startPoint, const GePoint2d& se
 	double e = ((startPoint.x * startPoint.x - secondPoint.x * secondPoint.x) + (startPoint.y * startPoint.y - secondPoint.y * secondPoint.y)) / 2.0;
 	double f = ((startPoint.x * startPoint.x - endPoint.x * endPoint.x) + (startPoint.y * startPoint.y - endPoint.y * endPoint.y)) / 2.0;
 	double v = b * c - a * d;
-	if (abs(v) < tol) {
+	if (std::fabs(v) < tol) {
 		return false;
 	}
 	_center.x = -(d * e - b * f) / v;
@@ -165,7 +203,7 @@ Adesk::Boolean GeCircArc2d::intersectWith(const GeCircArc2d& arc, int& intn, GeP
 	}
 	else if (pts.length() == 2) {
 		p1 = pts[0];
-		p2 = pts[2];
+		p2 = pts[1];
 	}
 	return true;
 }
@@ -182,9 +220,11 @@ GePoint2dArray GeCircArc2d::intersectWith(const GeLinearEnt2d& line, const GeTol
 
 		//获得垂点到圆心的距离
 		double dist = this->center().distanceTo(vertical);
-		if (abs(dist - this->radius()) <= tol.equalPoint())
+		if (std::fabs(dist - this->radius()) <= tol.equalPoint())
 		{
-			inters.append(vertical);
+			if (line.isOn(vertical, tol) == true && this->isOn(vertical, tol) == true) {
+				inters.append(vertical);
+			}
 			break;
 		}
 		if (dist > this->radius() + tol.equalPoint())
@@ -209,7 +249,7 @@ GePoint2dArray GeCircArc2d::intersectWith(const GeLinearEnt2d& line, const GeTol
 		if (line.isOn(point, tol) == true && this->isOn(point, tol)) {
 			bool isAppend = true;
 			if (inters.length() > 0) {
-				if (point.isEqualTo(inters[0]) == true) {
+				if (point.isEqualTo(inters[0], tol) == true) {
 					isAppend = false;
 				}
 			}
@@ -230,48 +270,52 @@ GePoint2dArray GeCircArc2d::intersectWith(const GeCircArc2d& arc, const GeTol& t
 
 	do
 	{
-		if (this->isInside(arc.center(), tol) == false) {
+		double dist = this->center().distanceTo(arc.center());
+		double radiusThis = this->radius();
+		double radiusOther = arc.radius();
+
+		if (dist > radiusThis + radiusOther + tol.equalPoint()) {
+			break;
+		}
+		if (dist < std::fabs(radiusThis - radiusOther) - tol.equalPoint()) {
+			break;
+		}
+		if (dist < tol.equalPoint()) {
 			break;
 		}
 
-		double dist = this->center().distanceTo(arc.center());
-
-		double val = (dist * dist + this->radius() * this->radius() - arc.radius() * arc.radius()) / (2 * dist);
+		double a = (radiusThis * radiusThis - radiusOther * radiusOther + dist * dist) / (2.0 * dist);
+		double h2 = radiusThis * radiusThis - a * a;
+		if (h2 < -tol.equalPoint()) {
+			break;
+		}
+		double h = std::sqrt(h2 < 0.0 ? 0.0 : h2);
 
 		//获得圆的两个交点
 		GePoint2dArray points;
-		if (abs(val * val - this->radius() * this->radius()) < tol.equalPoint())
-		{
-			GePoint2d target;
-			double t = this->radius() / dist;
-			target[0] = this->center()[0] * (1 - t) + arc.center()[0] * t;
-			target[1] = this->center()[1] * (1 - t) + arc.center()[1] * t;
-			points.append(target);
-		}
-		else if (val * val < this->radius() * this->radius())//相交
-		{
-			double h = pow((this->radius() * this->radius() - val * val), 0.5);
-
-			//c1-c2的单位方向向量计算
-			GeVector2d vector = this->center() - arc.center();
-			vector.normalize();
-
-			//获得垂点
-			GePoint2d vertical = this->center() + vector * sqrt((this->radius() * this->radius() - h * h));
-
-			//方向向量旋转PI/2
-			vector.rotateBy(PI / 2);
-
-			//获得第一点
-			points.append(vertical + vector * h);
-
-			//获得第二点
-			points.append(vertical - vector * h);
-		}
+		GeVector2d xAxis = arc.center() - this->center();
+		xAxis.normalize();
+		GeVector2d yAxis = xAxis;
+		yAxis.rotateBy(PI / 2.0);
+		GePoint2d basePoint = this->center() + xAxis * a;
+		points.append(basePoint + yAxis * h);
+		points.append(basePoint - yAxis * h);
 
 		for (int i = 0; i < points.length(); i++) {
-			if (this->isOn(points[i], tol) == true) {
-				intersects.append(points[i]);
+			if (this->isOn(points[i], tol) == true && arc.isOn(points[i], tol) == true) {
+				bool isDuplicate = false;
+				for (int k = 0; k < intersects.length(); ++k)
+				{
+					if (intersects[k].isEqualTo(points[i], tol))
+					{
+						isDuplicate = true;
+						break;
+					}
+				}
+				if (isDuplicate == false)
+				{
+					intersects.append(points[i]);
+				}
 			}
 		}
 
@@ -362,15 +406,23 @@ GeCircArc2d& GeCircArc2d::setRadius(double radius)
 }
 GeCircArc2d& GeCircArc2d::setAngles(double startAng, double endAng)
 {
-	if (startAng < 0.0) {
-		startAng = PI * 2 + startAng;
+	double sweep = endAng - startAng;
+	double absSweep = std::fabs(sweep);
+	double start = std::fmod(startAng, 2.0 * PI);
+	if (start < 0.0) {
+		start += 2.0 * PI;
 	}
-	if (endAng < 0.0) {
-		endAng = PI * 2 + endAng;
+	double end = std::fmod(endAng, 2.0 * PI);
+	if (end < 0.0) {
+		end += 2.0 * PI;
+	}
+	if (absSweep >= 2.0 * PI - GeContext::gTol.equalPoint())
+	{
+		end = start + (sweep >= 0.0 ? 2.0 * PI : -2.0 * PI);
 	}
 
-	GE_IMP_CIRCARC2D(this->m_pImpl)->startAngle = startAng;
-	GE_IMP_CIRCARC2D(this->m_pImpl)->endAngle = endAng;
+	GE_IMP_CIRCARC2D(this->m_pImpl)->startAngle = start;
+	GE_IMP_CIRCARC2D(this->m_pImpl)->endAngle = end;
 	return *this;
 }
 
@@ -489,14 +541,21 @@ bool GeCircArc2d::isEqualTo(const GeCircArc2d& entity, const GeTol& tol) const {
 	if (this->center().isEqualTo(entity.center(), tol) == false) {
 		return false;
 	}
-	if (abs(this->radius() - entity.radius()) > tol.equalPoint()) {
+	if (std::fabs(this->radius() - entity.radius()) > tol.equalPoint()) {
 		return false;
 	}
-	if (abs(this->startAng() - entity.startAng()) > tol.equalPoint()) {
+	bool thisClosed = this->isClosed(tol);
+	bool entityClosed = entity.isClosed(tol);
+	if (thisClosed != entityClosed) {
 		return false;
 	}
-	if (abs(this->endAng() - entity.endAng()) > tol.equalPoint()) {
-		return false;
+	if (thisClosed == false) {
+		if (std::fabs(periodic_angle_diff(this->startAng(), entity.startAng())) > tol.equalPoint()) {
+			return false;
+		}
+		if (std::fabs(periodic_angle_diff(this->endAng(), entity.endAng())) > tol.equalPoint()) {
+			return false;
+		}
 	}
 	if (this->refVec().isEqualTo(entity.refVec(), tol) == false) {
 		return false;
@@ -577,46 +636,26 @@ bool GeCircArc2d::isOn(const GePoint2d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GeCircArc2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
-	bool isValue = false;
+	if (std::fabs(this->center().distanceTo(pnt) - this->radius()) > tol.equalPoint()) {
+		return false;
+	}
 
-	do
-	{
-		if (abs(this->center().distanceTo(pnt) - this->radius()) > tol.equalPoint())
-		{
-			break;
-		}
-		if (abs(abs(this->endAng()) - abs(this->startAng())) < tol.equalPoint()) {
-			break;
-		}
-		if (abs(abs(this->endAng() - this->startAng()) - (PI * 2)) < tol.equalPoint()) {
-			isValue = true;
-			break;
-		}
+	if (this->isClosed(tol) == true) {
+		return true;
+	}
 
-		GePoint2d startPoint(this->center().x + this->radius(), this->center().y);
-		startPoint.rotateBy(this->startAng(), this->center());
-		if (startPoint.isEqualTo(pnt) == true) {
-			isValue = true;
-			break;
-		}
+	double start = this->startAng();
+	double end = this->endAng();
+	if (std::fabs(end - start) <= tol.equalPoint()) {
+		return false;
+	}
 
-		GePoint2d endPoint(this->center().x + this->radius(), this->center().y);
-		endPoint.rotateBy(this->endAng(), this->center());
-		if (endPoint.isEqualTo(pnt) == true) {
-			isValue = true;
-			break;
-		}
-
-		GePoint2d midPoint(this->center().x + this->radius(), this->center().y);
-		midPoint.rotateBy(this->startAng() + (this->endAng() - this->startAng()) / 2.0, this->center());
-
-		if (isClockWise(startPoint, midPoint, endPoint) == isClockWise(startPoint, pnt, endPoint)) {
-			isValue = true;
-		}
-
-	} while (false);
-
-	return isValue;
+	GeVector2d vector = pnt - this->center();
+	double angle = this->refVec().angleToCCW(vector);
+	if (this->isClockWise() == true) {
+		return angle_in_ccw_sweep(-start, -end, -angle, tol.equalPoint());
+	}
+	return angle_in_ccw_sweep(start, end, angle, tol.equalPoint());
 }
 void GeCircArc2d::getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const {
 	piece1 = NULL;
@@ -642,13 +681,21 @@ bool GeCircArc2d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newExp
 }
 GeBoundBlock2d GeCircArc2d::boundBlock() const {
 	GeInterval range;
-	range.set(this->paramOf(this->startPoint()), this->paramOf(this->endPoint()));
+	double start = this->startAng();
+	double end = this->endAng();
+	if (this->isClosed(GeContext::gTol) == true) {
+		end = start + 2.0 * PI;
+	}
+	else if (end < start) {
+		end += 2.0 * PI;
+	}
+	range.set(start, end);
 	return this->boundBlock(range);
 }
 GeBoundBlock2d GeCircArc2d::boundBlock(const GeInterval& range) const {
 
 	GeBoundBlock2d boundBlock;
-	if (abs(range.upperBound() - range.lowerBound() - PI * 2.0) < range.tolerance()) {
+	if (std::fabs(range.upperBound() - range.lowerBound() - PI * 2.0) < range.tolerance()) {
 
 		GePoint2d basePoint(this->center());
 		basePoint.x -= this->radius();
@@ -690,7 +737,15 @@ GeBoundBlock2d GeCircArc2d::boundBlock(const GeInterval& range) const {
 }
 GeBoundBlock2d GeCircArc2d::orthoBoundBlock() const {
 	GeInterval range;
-	range.set(this->paramOf(this->startPoint()), this->paramOf(this->endPoint()));
+	double start = this->startAng();
+	double end = this->endAng();
+	if (this->isClosed(GeContext::gTol) == true) {
+		end = start + 2.0 * PI;
+	}
+	else if (end < start) {
+		end += 2.0 * PI;
+	}
+	range.set(start, end);
 	return this->orthoBoundBlock(range);
 }
 GeBoundBlock2d GeCircArc2d::orthoBoundBlock(const GeInterval& range) const {
@@ -779,12 +834,8 @@ double GeCircArc2d::length(double fromParam, double toParam)const {
 	return this->length(fromParam, toParam, GeContext::gTol.equalPoint());
 }
 double GeCircArc2d::length(double fromParam, double toParam, double tol)const {
-	if (fromParam < 0) {
-		fromParam = PI * 2 - fromParam;
-	}
-	if (toParam < 0) {
-		toParam = PI * 2 - toParam;
-	}
+	fromParam = normalize_angle_2pi(fromParam);
+	toParam = normalize_angle_2pi(toParam);
 	if (this->isClockWise() == false) {
 		if (toParam < fromParam) {
 			toParam += 2 * PI;
@@ -809,13 +860,19 @@ double GeCircArc2d::paramAtLength(double datumParam, double length) const {
 	return this->paramAtLength(datumParam, length, GeContext::gTol.equalPoint());
 }
 double GeCircArc2d::paramAtLength(double datumParam, double length, double tol) const {
-	double param = 0.0;
-
-	param = datumParam + (length / (2 * PI * this->radius()) * (2 * PI));
-	if (param > PI * 2) {
-		param = param - int(param / (PI * 2)) * PI * 2;
+	if (std::fabs(this->radius()) <= tol) {
+		return datumParam;
 	}
-	return param;
+
+	double delta = length / this->radius();
+	double param = datumParam;
+	if (this->isClockWise() == true) {
+		param -= delta;
+	}
+	else {
+		param += delta;
+	}
+	return normalize_angle_2pi(param);
 }
 double GeCircArc2d::distanceTo(const GePoint2d& point) const
 {
@@ -867,8 +924,10 @@ GePoint2d GeCircArc2d::closestPointTo(const GePoint2d& pnt, const GeTol& tol) co
 
 	do
 	{
-		//获得圆弧和垂线是否存在交点
-		GePoint2dArray intersects = this->intersectWith(GeLineSeg2d(pnt, this->center()), tol);
+		GePoint2dArray intersects;
+		if (pnt.isEqualTo(this->center(), tol) == false) {
+			intersects = this->intersectWith(GeRay2d(this->center(), pnt), tol);
+		}
 		if (intersects.length() > 0) {
 			closest.set(intersects[0].x, intersects[0].y);
 			break;
@@ -1129,10 +1188,7 @@ double GeCircArc2d::paramOf(const GePoint2d& pnt, const GeTol& tol) const {
 	}
 
 	GeVector2d vector = pnt - this->center();
-	if (this->isClockWise() == false) {
-		return this->refVec().angleToCCW(vector);
-	}
-	return 2 * PI - this->refVec().angleToCCW(vector);
+	return normalize_angle_2pi(this->refVec().angleToCCW(vector));
 }
 void GeCircArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCurveList) const {
 	return this->getTrimmedOffset(distance, offsetCurveList, Ge::OffsetCrvExtType::kExtend);
@@ -1142,17 +1198,13 @@ void GeCircArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCu
 }
 void GeCircArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCurveList, Ge::OffsetCrvExtType extensionType, const GeTol& tol) const {
 
-	if (abs(this->radius() + distance) < tol.equalPoint()) {
+	double newRadius = this->radius() + distance;
+	if (newRadius <= tol.equalPoint()) {
 		return;
 	}
 
 	GeCircArc2d* circArc = new GeCircArc2d();
-	GE_IMP_CIRCARC2D(circArc->m_pImpl)->refVec = GE_IMP_CIRCARC2D(this->m_pImpl)->refVec;
-	GE_IMP_CIRCARC2D(circArc->m_pImpl)->center = this->center();
-	GE_IMP_CIRCARC2D(circArc->m_pImpl)->radius = this->radius() + distance;
-	GE_IMP_CIRCARC2D(circArc->m_pImpl)->startAngle = GE_IMP_CIRCARC2D(this->m_pImpl)->startAngle;
-	GE_IMP_CIRCARC2D(circArc->m_pImpl)->endAngle = GE_IMP_CIRCARC2D(this->m_pImpl)->endAngle;
-	GE_IMP_CIRCARC2D(circArc->m_pImpl)->isClockWise = GE_IMP_CIRCARC2D(this->m_pImpl)->isClockWise;
+	circArc->set(this->center(), newRadius, this->startAng(), this->endAng(), this->refVec(), this->isClockWise());
 
 	offsetCurveList.append(circArc);
 }
@@ -1160,7 +1212,18 @@ bool GeCircArc2d::isClosed() const {
 	return this->isClosed(GeContext::gTol);
 }
 bool GeCircArc2d::isClosed(const GeTol& tol) const {
-	if (abs(this->endAng() - this->startAng()) - PI * 2 < tol.equalPoint()) {
+	double absSweep = std::fabs(this->endAng() - this->startAng());
+	if (absSweep < 2.0 * PI - tol.equalPoint()) {
+		return false;
+	}
+
+	double turns = absSweep / (2.0 * PI);
+	double nearestTurns = std::floor(turns + 0.5);
+	if (nearestTurns < 1.0) {
+		nearestTurns = 1.0;
+	}
+
+	if (std::fabs(absSweep - nearestTurns * 2.0 * PI) <= tol.equalPoint()) {
 		return true;
 	}
 	return false;

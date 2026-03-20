@@ -1,6 +1,7 @@
 #include "GeScale2d.h"
 #include "GeMatrix2d.h"
 #include "GeScale3d.h"
+#include <cmath>
 
 
 const GeScale2d GeScale2d::kIdentity = GeScale2d();
@@ -105,7 +106,7 @@ bool GeScale2d::isProportional() const {
 }
 bool GeScale2d::isProportional(const GeTol& tol) const
 {
-    if (abs(this->sx - this->sy) > tol.equalPoint())
+    if (std::fabs(this->sx - this->sy) > tol.equalPoint())
     {
         return false;
     }
@@ -119,11 +120,11 @@ bool GeScale2d::isEqualTo(const GeScale2d& scaleVec) const
 }
 bool GeScale2d::isEqualTo(const GeScale2d& scaleVec, const GeTol& tol) const
 {
-    if (abs(this->sx - scaleVec.sx) >= tol.equalPoint())
+    if (std::fabs(this->sx - scaleVec.sx) >= tol.equalPoint())
     {
         return false;
     }
-    else if (abs(this->sy - scaleVec.sy) >= tol.equalPoint())
+    else if (std::fabs(this->sy - scaleVec.sy) >= tol.equalPoint())
     {
         return false;
     }

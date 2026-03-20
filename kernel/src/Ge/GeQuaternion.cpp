@@ -1,4 +1,5 @@
 #include "GeQuaternion.h"
+#include <cmath>
 
 //=======================================================================
 // function : IsEqual
@@ -11,10 +12,10 @@ bool GeQuaternion::isEqual(const GeQuaternion &theOther) const
     {
         return true;
     }
-    return abs(x - theOther.x) <= GeContext::gTol.equalPoint() &&
-           abs(y - theOther.y) <= GeContext::gTol.equalPoint() &&
-           abs(z - theOther.z) <= GeContext::gTol.equalPoint() &&
-           abs(w - theOther.w) <= GeContext::gTol.equalPoint();
+        return std::fabs(x - theOther.x) <= GeContext::gTol.equalPoint() &&
+            std::fabs(y - theOther.y) <= GeContext::gTol.equalPoint() &&
+            std::fabs(z - theOther.z) <= GeContext::gTol.equalPoint() &&
+            std::fabs(w - theOther.w) <= GeContext::gTol.equalPoint();
 }
 
 //=======================================================================
@@ -199,7 +200,7 @@ GeMatrix3d GeQuaternion::getMatrix() const
 
 void GeQuaternion::stabilizeLength()
 {
-    double cs = abs(x) + abs(y) + abs(z) + abs(w);
+    double cs = std::fabs(x) + std::fabs(y) + std::fabs(z) + std::fabs(w);
     if (cs > 0.0)
     {
         x /= cs;

@@ -249,8 +249,13 @@ double GeLineSeg2d::paramAtLength(double datumParam, double length) const {
 }
 double GeLineSeg2d::paramAtLength(double datumParam, double length, double tol) const {
 	double param = 0.0;
+	double segLen = this->length();
+	if (std::fabs(segLen) <= tol)
+	{
+		return datumParam;
+	}
 
-	param = datumParam + length / this->length();
+	param = datumParam + length / segLen;
 
 	return param;
 }
@@ -603,6 +608,15 @@ bool GeLineSeg2d::intersectWith(const GeLine2d& line, GePoint2d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeLineSeg2d::intersectWith(const GeLine2d& line, GePoint2d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint2d p = this->startPoint();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+
 	bool isValue = false;
 
 	do
@@ -628,6 +642,22 @@ bool GeLineSeg2d::intersectWith(const GeRay2d& line, GePoint2d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeLineSeg2d::intersectWith(const GeRay2d& line, GePoint2d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint2d p = this->startPoint();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+	if (line.length() <= tol.equalPoint()) {
+		GePoint2d p = line.pointOnLine();
+		if (this->isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
 
 	bool isValue = false;
 
@@ -654,6 +684,23 @@ bool GeLineSeg2d::intersectWith(const GeLineSeg2d& line, GePoint2d& intPnt) cons
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeLineSeg2d::intersectWith(const GeLineSeg2d& line, GePoint2d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint2d p = this->startPoint();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+	if (line.length() <= tol.equalPoint()) {
+		GePoint2d p = line.startPoint();
+		if (this->isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+
 	bool isValue = false;
 
 	do

@@ -1,6 +1,7 @@
 #include "GeMatrix2d.h"
 #include "GeScale2d.h"
 #include "GeLine2d.h"
+#include <cmath>
 
 
 const GeMatrix2d GeMatrix2d::kIdentity = GeMatrix2d();
@@ -65,7 +66,7 @@ bool GeMatrix2d::isEqualTo(const GeMatrix2d& mat, const GeTol& tol) const
 	{
 		for (int u = 0; u < 3; u++)
 		{
-			if (abs(this->entry[i][u] - mat.entry[i][u]) > GeContext::gTol.equalPoint())
+			if (std::fabs(this->entry[i][u] - mat.entry[i][u]) > GeContext::gTol.equalPoint())
 			{
 				IsEqual = false;
 				break;

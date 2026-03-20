@@ -189,8 +189,13 @@ double GeRay2d::paramAtLength(double datumParam, double length) const {
 }
 double GeRay2d::paramAtLength(double datumParam, double length, double tol) const {
 	double param = 0.0;
+	double rayLen = this->length();
+	if (std::fabs(rayLen) <= tol)
+	{
+		return datumParam;
+	}
 
-	param = datumParam + length / this->length();
+	param = datumParam + length / rayLen;
 
 	return param;
 }
@@ -536,6 +541,15 @@ bool GeRay2d::intersectWith(const GeLine2d& line, GePoint2d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeRay2d::intersectWith(const GeLine2d& line, GePoint2d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint2d p = this->pointOnLine();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+
 	bool isValue = false;
 
 	do
@@ -561,6 +575,22 @@ bool GeRay2d::intersectWith(const GeRay2d& line, GePoint2d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeRay2d::intersectWith(const GeRay2d& line, GePoint2d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint2d p = this->pointOnLine();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+	if (line.length() <= tol.equalPoint()) {
+		GePoint2d p = line.pointOnLine();
+		if (this->isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
 
 	bool isValue = false;
 
@@ -587,6 +617,23 @@ bool GeRay2d::intersectWith(const GeLineSeg2d& line, GePoint2d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeRay2d::intersectWith(const GeLineSeg2d& line, GePoint2d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint2d p = this->pointOnLine();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+	if (line.length() <= tol.equalPoint()) {
+		GePoint2d p = line.startPoint();
+		if (this->isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+
 	bool isValue = false;
 
 	do

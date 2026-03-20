@@ -1,6 +1,11 @@
 #include "GePoint3d.h"
 #include "GeMatrix3d.h"
 #include "GePlane.h"
+#include <cmath>
+
+namespace {
+const double kPerspectiveDividerTol = 1e-100;
+}
 
 
 const GePoint3d GePoint3d::kOrigin = GePoint3d(0, 0, 0);
@@ -8,7 +13,7 @@ const GePoint3d GePoint3d::kOrigin = GePoint3d(0, 0, 0);
 
 GePoint3d operator* (const GeMatrix3d& xfm, const GePoint3d& vect) {
 	double divider = xfm.entry[3][0] * vect.x + xfm.entry[3][1] * vect.y + xfm.entry[3][2] * vect.z + xfm.entry[3][3];
-	if (abs(divider) <= GeContext::gTol.equalPoint()) {
+	if (std::fabs(divider) <= kPerspectiveDividerTol) {
 		return vect;
 	}
 
@@ -33,7 +38,7 @@ GePoint3d& GePoint3d::transformBy(const GeMatrix3d& leftSide, Ge::ErrorCondition
 	status = Ge::kOk;
 	if (leftSide.isPerspective()) {
 		double divider = leftSide.entry[3][0] * this->x + leftSide.entry[3][1] * this->y + leftSide.entry[3][2] * this->z + leftSide.entry[3][3];
-		if (abs(divider) <= GeContext::gTol.equalPoint()) {
+		if (std::fabs(divider) <= kPerspectiveDividerTol) {
 			status = Ge::kDegenerateGeometry;
 			return *this;
 		}
@@ -89,16 +94,7 @@ bool GePoint3d::isEqualTo(const GePoint3d& point) const {
 }
 bool GePoint3d::isEqualTo(const GePoint3d& pnt, const GeTol& tol) const
 {
-	if (abs(pnt.x - this->x) > tol.equalPoint()) {
-		return false;
-	}
-	if (abs(pnt.y - this->y) > tol.equalPoint()) {
-		return false;
-	}
-	if (abs(pnt.z - this->z) > tol.equalPoint()) {
-		return false;
-	}
-	return true;
+	return ((*this - pnt).length() <= tol.equalPoint());
 }
 GePoint3d& GePoint3d::setToSum(const GePoint3d& vector1, const GeVector3d& vector2)
 {
@@ -115,72 +111,27 @@ GePoint3d& GePoint3d::swapWithPoint(GePoint3d& point)
 	return *this;
 }
 GePoint3d GePoint3d::project(const GePlane& plane, const GeVector3d& vect) const {
-
-	//获得点到平面的最近点
-	GePoint3d closest = this->orthoProject(plane);
-
-	//获得垂线和法向的夹角
-	double angle = plane.normal().angle(vect);
-	if (abs(angle) < GeContext::gTol.equalPoint()) {
-		return closest;
+	GeVector3d normal = plane.normal();
+	if (normal.isZeroLength(GeContext::gTol) || vect.isZeroLength(GeContext::gTol)) {
+		return *this;
+	}
+	double divider = normal.dotProduct(vect);
+	if (std::fabs(divider) <= GeContext::gTol.equalVector()) {
+		return *this;
 	}
 
-	//获得邻边尺寸
-	double dist = this->distanceTo(closest);
-	dist = dist / cos(angle);
-
-	//获得方向标准化
-	GeVector3d direction = vect.normal();
-
-	//获得点
-	GePoint3d point;
-	point.set(this->x, this->y, this->z);
-	point += (direction * dist);
-
-	//判断点是否在平面上
-	GeVector3d vec = point - closest;
-	if (vec.isPerpendicularTo(plane.normal()) == false) {
-		point.set(this->x, this->y, this->z);
-		point += (direction * -dist);
-	}
-
-	return point;
+	GeVector3d offset = plane.pointOnPlane() - *this;
+	double t = normal.dotProduct(offset) / divider;
+	return *this + vect * t;
 }
 GePoint3d GePoint3d::orthoProject(const GePlane& plane) const {
+	GeVector3d normal = plane.normal();
+	if (normal.isZeroLength(GeContext::gTol)) {
+		return *this;
+	}
+	normal.normalize();
 
-	GePoint3d point;
-
-	do
-	{
-		//获得点到平面原点的距离(斜边)
-		double dist = this->distanceTo(plane.pointOnPlane());
-		if (abs(dist) < GeContext::gTol.equalPoint()) {
-			point.set(this->x, this->y, this->z);
-			break;
-		}
-
-		// 获得邻边长度
-		GeVector3d vec = *this - plane.pointOnPlane();
-		double angle = vec.angle(plane.normal());
-		dist = dist * cos(angle);
-
-		//获得平面法向
-		GeVector3d normal = plane.normal();
-		normal.normalize();
-		normal.negate();
-
-		//将点沿着法向移动
-		point.set(this->x, this->y, this->z);
-		point += (normal * dist);
-
-		//判断点是否在平面上
-		vec = point - plane.pointOnPlane();
-		if (vec.isPerpendicularTo(plane.normal()) == false) {
-			point.set(this->x, this->y, this->z);
-			point += (normal * -dist);
-		}
-
-	} while (false);
-
-	return point;
+	GeVector3d offset = *this - plane.pointOnPlane();
+	double signedDist = offset.dotProduct(normal);
+	return *this - normal * signedDist;
 }

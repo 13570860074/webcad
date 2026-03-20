@@ -6,6 +6,7 @@
 #include "GePlane.h"
 #include "GePointOnSurface.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 namespace {
@@ -24,7 +25,7 @@ bool bounded_plane_param_of(const GePoint3d& origin, const GeVector3d& xAxis, co
 		return false;
 	}
 
-	if (fabs(offset.dotProduct(normal)) > tol.equalPoint() * normalLength)
+	if (std::fabs(offset.dotProduct(normal)) > tol.equalPoint() * normalLength)
 	{
 		param.set(0.0, 0.0);
 		return false;

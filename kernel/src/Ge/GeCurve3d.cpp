@@ -4,6 +4,7 @@
 #include "GeInterval.h"
 #include "GePlane.h"
 #include "GeLine3d.h"
+#include <cmath>
 
 namespace {
 bool curve3d_build_plane_from_direction(const GePoint3d& point, const GeVector3d& direction, const GeTol& tol, GePlane& plane)
@@ -523,7 +524,7 @@ double GeCurve3d::paramAtLength(double datumParam, double length) const {
 	return this->paramAtLength(datumParam, length, GeContext::gTol.equalPoint());
 }
 double GeCurve3d::paramAtLength(double datumParam, double length, double tol) const {
-	if (length == 0.0) {
+	if (std::fabs(length) <= tol) {
 		return datumParam;
 	}
 

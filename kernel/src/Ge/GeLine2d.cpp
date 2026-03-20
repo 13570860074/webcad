@@ -183,8 +183,13 @@ double GeLine2d::paramAtLength(double datumParam, double length) const {
 }
 double GeLine2d::paramAtLength(double datumParam, double length, double tol) const {
 	double param = 0.0;
+	double lineLen = this->length();
+	if (std::fabs(lineLen) <= tol)
+	{
+		return datumParam;
+	}
 
-	param = datumParam + length / this->length();
+	param = datumParam + length / lineLen;
 
 	return param;
 }

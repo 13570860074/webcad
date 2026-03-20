@@ -8,6 +8,7 @@
 #include "GeInterval.h"
 #include "GeBoundBlock3d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 namespace {
 void selectClosestPair(const GePoint3dArray& pointItselfs, const GePoint3dArray& pointOthers, GePoint3d& closest, GePoint3d& pntOnOtherCrv)
@@ -191,8 +192,13 @@ double GeRay3d::paramAtLength(double datumParam, double length) const {
 }
 double GeRay3d::paramAtLength(double datumParam, double length, double tol) const {
 	double param = 0.0;
+	double rayLen = this->length();
+	if (std::fabs(rayLen) <= tol)
+	{
+		return datumParam;
+	}
 
-	param = datumParam + length / this->length();
+	param = datumParam + length / rayLen;
 
 	return param;
 }
@@ -562,7 +568,7 @@ void GeRay3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, G
 }
 void GeRay3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, GeVoidPointerArray& offsetCurveList, Ge::OffsetCrvExtType extensionType, const GeTol& tol) const {
 	
-	if (abs(distance) < 0.0000001)
+	if (std::fabs(distance) <= tol.equalPoint())
 	{
 		GeRay3d* line = new GeRay3d();
 		line->set(GE_IMP_LINEARENT3D(this->m_pImpl)->origin, GE_IMP_LINEARENT3D(this->m_pImpl)->vector);
@@ -802,6 +808,15 @@ bool GeRay3d::intersectWith(const GeLine3d& line, GePoint3d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeRay3d::intersectWith(const GeLine3d& line, GePoint3d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint3d p = this->pointOnLine();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+
 	GeLine3d line1(this->pointOnLine(), this->direction());
 	GeLine3d line2(line.pointOnLine(), line.direction());
 	if (line1.intersectWith(line2, intPnt, tol) == false) {
@@ -819,6 +834,22 @@ bool GeRay3d::intersectWith(const GeRay3d& line, GePoint3d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeRay3d::intersectWith(const GeRay3d& line, GePoint3d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint3d p = this->pointOnLine();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+	if (line.length() <= tol.equalPoint()) {
+		GePoint3d p = line.pointOnLine();
+		if (this->isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
 
 	GeLine3d line1(this->pointOnLine(), this->direction());
 	GeLine3d line2(line.pointOnLine(), line.direction());
@@ -837,6 +868,23 @@ bool GeRay3d::intersectWith(const GeLineSeg3d& line, GePoint3d& intPnt) const {
 	return this->intersectWith(line, intPnt, GeContext::gTol);
 }
 bool GeRay3d::intersectWith(const GeLineSeg3d& line, GePoint3d& intPnt, const GeTol& tol) const {
+	if (this->length() <= tol.equalPoint()) {
+		GePoint3d p = this->pointOnLine();
+		if (line.isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+	if (line.length() <= tol.equalPoint()) {
+		GePoint3d p = line.startPoint();
+		if (this->isOn(p, tol) == true) {
+			intPnt = p;
+			return true;
+		}
+		return false;
+	}
+
 	GeLine3d line1(this->pointOnLine(), this->direction());
 	GeLine3d line2(line.pointOnLine(), line.direction());
 	if (line1.intersectWith(line2, intPnt, tol) == false) {

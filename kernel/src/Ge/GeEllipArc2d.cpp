@@ -10,6 +10,156 @@
 #include "GeBoundBlock2d.h"
 #include "GeCircArc2d.h"
 #include "GeImpl.h"
+#include <cmath>
+
+namespace {
+double ellip2d_normalize_param(double param)
+{
+    param = std::fmod(param, 2.0 * PI);
+    if (param < 0.0) {
+        param += 2.0 * PI;
+    }
+    return param;
+}
+
+void ellip2d_append_unique_point(GePoint2dArray& points, const GePoint2d& point, const GeTol& tol)
+{
+    for (int i = 0; i < points.length(); i++) {
+        if (points[i].isEqualTo(point, tol) == true) {
+            return;
+        }
+    }
+    points.append(point);
+}
+
+double ellip2d_param_sweep(const GeEllipArc2d& arc, const GeTol& tol)
+{
+    if (arc.isClosed(tol) == true) {
+        return 2.0 * PI;
+    }
+
+    double start = ellip2d_normalize_param(arc.startAng());
+    double end = ellip2d_normalize_param(arc.endAng());
+    if (end < start) {
+        end += 2.0 * PI;
+    }
+    return end - start;
+}
+
+GePoint2d ellip2d_eval_point(const GeEllipArc2d& arc, double param)
+{
+    param = ellip2d_normalize_param(param);
+    GePoint2d point = arc.center();
+    point += arc.majorAxis() * std::cos(param);
+    point += arc.minorAxis() * std::sin(param);
+    return point;
+}
+
+double ellip2d_circle_residual(const GeEllipArc2d& ellipse, const GeCircArc2d& circle, double param)
+{
+    GePoint2d point = ellip2d_eval_point(ellipse, param);
+    return point.distanceTo(circle.center()) - circle.radius();
+}
+
+double ellip2d_circle_abs_residual(const GeEllipArc2d& ellipse, const GeCircArc2d& circle, double param)
+{
+    return std::fabs(ellip2d_circle_residual(ellipse, circle, param));
+}
+
+double ellip2d_bisect_circle_param(const GeEllipArc2d& ellipse, const GeCircArc2d& circle, double fromParam, double toParam, const GeTol& tol)
+{
+    double leftParam = fromParam;
+    double rightParam = toParam;
+    double leftValue = ellip2d_circle_residual(ellipse, circle, leftParam);
+    double midParam = (leftParam + rightParam) * 0.5;
+
+    for (int i = 0; i < 64; i++) {
+        midParam = (leftParam + rightParam) * 0.5;
+        double midValue = ellip2d_circle_residual(ellipse, circle, midParam);
+        if (std::fabs(midValue) <= tol.equalPoint()) {
+            break;
+        }
+
+        if (leftValue * midValue <= 0.0) {
+            rightParam = midParam;
+        }
+        else {
+            leftParam = midParam;
+            leftValue = midValue;
+        }
+    }
+
+    return ellip2d_normalize_param(midParam);
+}
+
+double ellip2d_refine_circle_min_param(const GeEllipArc2d& ellipse, const GeCircArc2d& circle, double fromParam, double toParam)
+{
+    double leftParam = fromParam;
+    double rightParam = toParam;
+    const double goldenRatio = 0.6180339887498949;
+    double x1 = rightParam - (rightParam - leftParam) * goldenRatio;
+    double x2 = leftParam + (rightParam - leftParam) * goldenRatio;
+    double f1 = ellip2d_circle_abs_residual(ellipse, circle, x1);
+    double f2 = ellip2d_circle_abs_residual(ellipse, circle, x2);
+
+    for (int i = 0; i < 64; i++) {
+        if (f1 <= f2) {
+            rightParam = x2;
+            x2 = x1;
+            f2 = f1;
+            x1 = rightParam - (rightParam - leftParam) * goldenRatio;
+            f1 = ellip2d_circle_abs_residual(ellipse, circle, x1);
+        }
+        else {
+            leftParam = x1;
+            x1 = x2;
+            f1 = f2;
+            x2 = leftParam + (rightParam - leftParam) * goldenRatio;
+            f2 = ellip2d_circle_abs_residual(ellipse, circle, x2);
+        }
+    }
+
+    return ellip2d_normalize_param((leftParam + rightParam) * 0.5);
+}
+
+double ellip2d_point_dist2(const GeEllipArc2d& ellipse, const GePoint2d& point, double param)
+{
+    GePoint2d curvePoint = ellip2d_eval_point(ellipse, param);
+    double dx = curvePoint.x - point.x;
+    double dy = curvePoint.y - point.y;
+    return dx * dx + dy * dy;
+}
+
+double ellip2d_refine_point_min_param(const GeEllipArc2d& ellipse, const GePoint2d& point, double fromParam, double toParam)
+{
+    double leftParam = fromParam;
+    double rightParam = toParam;
+    const double goldenRatio = 0.6180339887498949;
+    double x1 = rightParam - (rightParam - leftParam) * goldenRatio;
+    double x2 = leftParam + (rightParam - leftParam) * goldenRatio;
+    double f1 = ellip2d_point_dist2(ellipse, point, x1);
+    double f2 = ellip2d_point_dist2(ellipse, point, x2);
+
+    for (int i = 0; i < 64; i++) {
+        if (f1 <= f2) {
+            rightParam = x2;
+            x2 = x1;
+            f2 = f1;
+            x1 = rightParam - (rightParam - leftParam) * goldenRatio;
+            f1 = ellip2d_point_dist2(ellipse, point, x1);
+        }
+        else {
+            leftParam = x1;
+            x1 = x2;
+            f1 = f2;
+            x2 = leftParam + (rightParam - leftParam) * goldenRatio;
+            f2 = ellip2d_point_dist2(ellipse, point, x2);
+        }
+    }
+
+    return ellip2d_normalize_param((leftParam + rightParam) * 0.5);
+}
+}
 
 
 GeEllipArc2d::GeEllipArc2d() {
@@ -77,50 +227,16 @@ bool GeEllipArc2d::intersectWith(const GeLinearEnt2d& line, int& intn, GePoint2d
     return this->intersectWith(line, intn, p1, p2, GeContext::gTol);
 }
 bool GeEllipArc2d::intersectWith(const GeLinearEnt2d& line, int& intn, GePoint2d& p1, GePoint2d& p2, const GeTol& tol) const {
-
-    //std::vector<Point> intersections;
-
-    // 转为一般式
-    double A, B, C;
-    GeLinearEnt2d::generalFormula(line, A, B, C);
-
-    double a = this->majorRadius();
-    double b = this->minorRadius();
-
-    double discriminant, x1, x2, y1, y2;
-
-    // 将直线方程代入椭圆方程  
-    double term1 = a * a * B * B;
-    double term2 = b * b * A * A;
-    double term3 = 2 * a * a * B * C;
-    double term4 = a * a * C * C - b * b * B * B;
-
-    discriminant = term3 * term3 - 4 * term1 * term4;
-
-    // 判断是否有交点  
-    if (discriminant < 0) {
-        // 无交点  
-        intn = 0;
+    GePoint2dArray points = this->intersectWith(line, tol);
+    intn = points.length();
+    if (intn == 0) {
         return false;
     }
-    else if (abs(discriminant) < 0.00002) {
-        // 一个交点  
-        intn = 1;
-        x1 = -term3 / (2 * term1);
-        y1 = -(A / B) * x1 - C / B;
-        p1.set(x1, y1);
-        return true;
+    if (intn >= 1) {
+        p1 = points[0];
     }
-    else {
-        // 两个交点  
-        intn = 2;
-        x1 = (-term3 + sqrt(discriminant)) / (2 * term1);
-        x2 = (-term3 - sqrt(discriminant)) / (2 * term1);
-        y1 = -(A / B) * x1 - C / B;
-        y2 = -(A / B) * x2 - C / B;
-        p1.set(x1, y1);
-        p2.set(x2, y2);
-        return true;
+    if (intn >= 2) {
+        p2 = points[1];
     }
     return true;
 }
@@ -128,18 +244,60 @@ GePoint2dArray GeEllipArc2d::intersectWith(const GeLinearEnt2d& line) const {
     return this->intersectWith(line, GeContext::gTol);
 }
 GePoint2dArray GeEllipArc2d::intersectWith(const GeLinearEnt2d& line, const GeTol& tol)const {
-    
     GePoint2dArray points;
 
-    int intn;
-    GePoint2d p1, p2;
-    this->intersectWith(line, intn, p1, p2, tol);
-    if (intn == 1) {
-        points.append(p1);
+    double majorRadius = this->majorRadius();
+    double minorRadius = this->minorRadius();
+    if (majorRadius <= tol.equalPoint() || minorRadius <= tol.equalPoint()) {
+        return points;
     }
-    else if (intn == 2) {
-        points.append(p2);
+
+    GeVector2d majorDir = this->majorAxis();
+    GeVector2d minorDir = this->minorAxis();
+    if (majorDir.isZeroLength(tol) == true || minorDir.isZeroLength(tol) == true) {
+        return points;
     }
+    majorDir.normalize();
+    minorDir.normalize();
+
+    GeVector2d offset = line.pointOnLine() - this->center();
+    GeVector2d direction = line.direction();
+    double x0 = offset.dotProduct(majorDir);
+    double y0 = offset.dotProduct(minorDir);
+    double dx = direction.dotProduct(majorDir);
+    double dy = direction.dotProduct(minorDir);
+
+    double quadA = (dx * dx) / (majorRadius * majorRadius) + (dy * dy) / (minorRadius * minorRadius);
+    double quadB = 2.0 * ((x0 * dx) / (majorRadius * majorRadius) + (y0 * dy) / (minorRadius * minorRadius));
+    double quadC = (x0 * x0) / (majorRadius * majorRadius) + (y0 * y0) / (minorRadius * minorRadius) - 1.0;
+    if (std::fabs(quadA) <= tol.equalVector()) {
+        return points;
+    }
+
+    double discriminant = quadB * quadB - 4.0 * quadA * quadC;
+    if (discriminant < -tol.equalPoint()) {
+        return points;
+    }
+
+    auto tryAppendPoint = [&](double lineParam) {
+        GePoint2d point = line.pointOnLine() + direction * lineParam;
+        if (line.isOn(point, tol) == false) {
+            return;
+        }
+        if (this->isOn(point, tol) == false) {
+            return;
+        }
+        ellip2d_append_unique_point(points, point, tol);
+    };
+
+    if (std::fabs(discriminant) <= tol.equalPoint()) {
+        tryAppendPoint(-quadB / (2.0 * quadA));
+        return points;
+    }
+
+    double root = std::sqrt(discriminant);
+    tryAppendPoint((-quadB + root) / (2.0 * quadA));
+    tryAppendPoint((-quadB - root) / (2.0 * quadA));
     return points;
 }
 GePoint2dArray GeEllipArc2d::intersectWith(const GeCircArc2d& arc)const {
@@ -147,13 +305,86 @@ GePoint2dArray GeEllipArc2d::intersectWith(const GeCircArc2d& arc)const {
 }
 GePoint2dArray GeEllipArc2d::intersectWith(const GeCircArc2d& arc, const GeTol& tol)const {
     GePoint2dArray points;
+
+    if (this->isCircular(tol) == true && this->majorRadius() > tol.equalPoint()) {
+        GeCircArc2d ellipseAsCircle;
+        ellipseAsCircle.set(this->center(), this->majorRadius(), this->startAng(), this->endAng(), this->majorAxis().normal(), false);
+        GePoint2dArray circlePoints = ellipseAsCircle.intersectWith(arc, tol);
+        for (int i = 0; i < circlePoints.length(); i++) {
+            if (this->isOn(circlePoints[i], tol) == true && arc.isOn(circlePoints[i], tol) == true) {
+                ellip2d_append_unique_point(points, circlePoints[i], tol);
+            }
+        }
+        return points;
+    }
+
+    double sweep = ellip2d_param_sweep(*this, tol);
+    if (sweep <= tol.equalPoint()) {
+        sweep = 2.0 * PI;
+    }
+
+    int numSegments = 2048;
+    if (sweep < PI * 2.0) {
+        numSegments = static_cast<int>(2048.0 * sweep / (PI * 2.0));
+        if (numSegments < 256) {
+            numSegments = 256;
+        }
+    }
+
+    double startParam = this->startAng();
+    double prevParam = startParam;
+    double prevValue = ellip2d_circle_residual(*this, arc, prevParam);
+    if (std::fabs(prevValue) <= tol.equalPoint()) {
+        GePoint2d point = ellip2d_eval_point(*this, prevParam);
+        if (this->isOn(point, tol) == true && arc.isOn(point, tol) == true) {
+            ellip2d_append_unique_point(points, point, tol);
+        }
+    }
+
+    for (int i = 1; i <= numSegments; i++) {
+        double currentParam = startParam + sweep * i / numSegments;
+        double currentValue = ellip2d_circle_residual(*this, arc, currentParam);
+
+        if (std::fabs(currentValue) <= tol.equalPoint()) {
+            GePoint2d point = ellip2d_eval_point(*this, currentParam);
+            if (this->isOn(point, tol) == true && arc.isOn(point, tol) == true) {
+                ellip2d_append_unique_point(points, point, tol);
+            }
+        }
+
+        if (prevValue * currentValue < 0.0) {
+            double param = ellip2d_bisect_circle_param(*this, arc, prevParam, currentParam, tol);
+            GePoint2d point = ellip2d_eval_point(*this, param);
+            if (this->isOn(point, tol) == true && arc.isOn(point, tol) == true) {
+                ellip2d_append_unique_point(points, point, tol);
+            }
+        }
+
+        if (i < numSegments) {
+            double nextParam = startParam + sweep * (i + 1) / numSegments;
+            double nextValue = ellip2d_circle_residual(*this, arc, nextParam);
+            if (std::fabs(currentValue) <= std::fabs(prevValue) && std::fabs(currentValue) <= std::fabs(nextValue)) {
+                double param = ellip2d_refine_circle_min_param(*this, arc, prevParam, nextParam);
+                if (ellip2d_circle_abs_residual(*this, arc, param) <= tol.equalPoint()) {
+                    GePoint2d point = ellip2d_eval_point(*this, param);
+                    if (this->isOn(point, tol) == true && arc.isOn(point, tol) == true) {
+                        ellip2d_append_unique_point(points, point, tol);
+                    }
+                }
+            }
+        }
+
+        prevParam = currentParam;
+        prevValue = currentValue;
+    }
+
     return points;
 }
 bool GeEllipArc2d::isCircular() const {
     return this->isCircular(GeContext::gTol);
 }
 bool GeEllipArc2d::isCircular(const GeTol& tol) const {
-    if (abs(this->majorRadius() - this->minorRadius()) < tol.equalVector()) {
+    if (std::fabs(this->majorRadius() - this->minorRadius()) < tol.equalVector()) {
         return true;
     }
     return false;
@@ -230,8 +461,22 @@ GeEllipArc2d& GeEllipArc2d::setAxes(const GeVector2d& majorAxis, const GeVector2
     return *this;
 }
 GeEllipArc2d& GeEllipArc2d::setAngles(double startAngle, double endAngle) {
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->startAngle = startAngle;
-    GE_IMP_ELLIPARC2D(this->m_pImpl)->endAngle = endAngle;
+    double sweep = endAngle - startAngle;
+    double absSweep = std::fabs(sweep);
+    double start = std::fmod(startAngle, 2.0 * PI);
+    if (start < 0.0) {
+        start += 2.0 * PI;
+    }
+    double end = std::fmod(endAngle, 2.0 * PI);
+    if (end < 0.0) {
+        end += 2.0 * PI;
+    }
+    if (absSweep >= 2.0 * PI - GeContext::gTol.equalPoint())
+    {
+        end = start + (sweep >= 0.0 ? 2.0 * PI : -2.0 * PI);
+    }
+    GE_IMP_ELLIPARC2D(this->m_pImpl)->startAngle = start;
+    GE_IMP_ELLIPARC2D(this->m_pImpl)->endAngle = end;
     return *this;
 }
 
@@ -244,8 +489,7 @@ GeEllipArc2d& GeEllipArc2d::set(const GePoint2d& cent, const GeVector2d& majorAx
         GE_IMP_ELLIPARC2D(this->m_pImpl)->center = cent;
         GE_IMP_ELLIPARC2D(this->m_pImpl)->majorAxis = majorAxis.normal() * majorRadius;
         GE_IMP_ELLIPARC2D(this->m_pImpl)->ratio = minorRadius / majorRadius;
-        GE_IMP_ELLIPARC2D(this->m_pImpl)->startAngle = startAngle;
-        GE_IMP_ELLIPARC2D(this->m_pImpl)->endAngle = endAngle;
+        this->setAngles(startAngle, endAngle);
     }
     return *this;
 }
@@ -294,24 +538,44 @@ bool GeEllipArc2d::isEqualTo(const GeEllipArc2d& entity) const {
     return this->isEqualTo(entity, GeContext::gTol);
 }
 bool GeEllipArc2d::isEqualTo(const GeEllipArc2d& entity, const GeTol& tol) const {
+    auto angleDiff = [](double a, double b) {
+        double diff = std::fmod(a - b, 2.0 * PI);
+        if (diff < 0.0) {
+            diff += 2.0 * PI;
+        }
+        if (diff > PI) {
+            diff = 2.0 * PI - diff;
+        }
+        return diff;
+    };
+
     if (this->center().isEqualTo(entity.center(), tol) == false) {
         return false;
     }
     if (this->majorAxis().isEqualTo(entity.majorAxis(), tol) == false) {
         return false;
     }
-    if (abs(this->majorRadius() - entity.majorRadius()) > tol.equalPoint()) {
+    if (std::fabs(this->majorRadius() - entity.majorRadius()) > tol.equalPoint()) {
         return false;
     }
-    if (abs(this->minorRadius() - entity.minorRadius()) > tol.equalPoint()) {
+    if (std::fabs(this->minorRadius() - entity.minorRadius()) > tol.equalPoint()) {
         return false;
     }
-    if (abs(this->startAng() - entity.startAng()) > tol.equalPoint()) {
+
+    bool thisClosed = this->isClosed(tol);
+    bool entityClosed = entity.isClosed(tol);
+    if (thisClosed != entityClosed) {
         return false;
     }
-    if (abs(this->endAng() - entity.endAng()) > tol.equalPoint()) {
-        return false;
+    if (thisClosed == false) {
+        if (angleDiff(this->startAng(), entity.startAng()) > tol.equalPoint()) {
+            return false;
+        }
+        if (angleDiff(this->endAng(), entity.endAng()) > tol.equalPoint()) {
+            return false;
+        }
     }
+
     return true;
 }
 GeEllipArc2d& GeEllipArc2d::transformBy(const GeMatrix2d& xfm) {
@@ -381,6 +645,10 @@ bool GeEllipArc2d::isOn(const GePoint2d& pnt) const {
 */
 bool GeEllipArc2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
 
+    if (this->majorRadius() <= tol.equalPoint() || this->minorRadius() <= tol.equalPoint()) {
+        return false;
+    }
+
     // 获得X轴到长轴的夹角
     double angle = GeVector2d::kXAxis.angleToCCW(this->majorAxis());
 
@@ -390,13 +658,13 @@ bool GeEllipArc2d::isOn(const GePoint2d& pnt, const GeTol& tol) const {
 
     // 做Y轴缩放
     GeMatrix2d mat;
-    mat.setToScaling(GeScale2d(1, this->majorRadius() / this->minorRadius()));
+    mat.setToScaling(GeScale2d(1, this->majorRadius() / this->minorRadius()), this->center());
     position.transformBy(mat);
 
     // 判断点是否在圆弧上
     GeCircArc2d circArc;
     circArc.set(this->center(), this->majorRadius(), this->startAng(), this->endAng());
-    return circArc.isOn(position);
+    return circArc.isOn(position, tol);
 }
 
 
@@ -425,7 +693,15 @@ bool GeEllipArc2d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newEx
 }
 GeBoundBlock2d GeEllipArc2d::boundBlock() const {
     GeInterval range;
-    range.set(this->paramOf(this->startPoint()), this->paramOf(this->endPoint()));
+    double start = this->startAng();
+    double end = this->endAng();
+    if (this->isClosed(GeContext::gTol) == true) {
+        end = start + 2.0 * PI;
+    }
+    else if (end < start) {
+        end += 2.0 * PI;
+    }
+    range.set(start, end);
     return this->boundBlock(range);
 }
 GeBoundBlock2d GeEllipArc2d::boundBlock(const GeInterval& range) const {
@@ -446,7 +722,15 @@ GeBoundBlock2d GeEllipArc2d::boundBlock(const GeInterval& range) const {
 }
 GeBoundBlock2d GeEllipArc2d::orthoBoundBlock() const {
     GeInterval range;
-    range.set(this->paramOf(this->startPoint()), this->paramOf(this->endPoint()));
+    double start = this->startAng();
+    double end = this->endAng();
+    if (this->isClosed(GeContext::gTol) == true) {
+        end = start + 2.0 * PI;
+    }
+    else if (end < start) {
+        end += 2.0 * PI;
+    }
+    range.set(start, end);
     return this->orthoBoundBlock(range);
 }
 GeBoundBlock2d GeEllipArc2d::orthoBoundBlock(const GeInterval& range) const {
@@ -522,17 +806,18 @@ bool GeEllipArc2d::hasEndPoint(GePoint2d& endPoint) const {
     return true;
 }
 double GeEllipArc2d::length() const {
-    GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 200);
-    double len = 0.0;
-    for (int i = 1; i < points.length(); i++) {
-        len += (points[i - 1].distanceTo(points[i]));
-    }
-    return len;
+    return this->length(this->startAng(), this->endAng(), GeContext::gTol.equalPoint());
 }
 double GeEllipArc2d::length(double fromParam, double toParam)const {
     return this->length(fromParam, toParam, GeContext::gTol.equalPoint());
 }
 double GeEllipArc2d::length(double fromParam, double toParam, double tol)const {
+    fromParam = ellip2d_normalize_param(fromParam);
+    toParam = ellip2d_normalize_param(toParam);
+    if (toParam < fromParam) {
+        toParam += PI * 2.0;
+    }
+
     GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), fromParam, toParam, 256);
     double len = 0.0;
     for (int i = 1; i < points.length(); i++) {
@@ -553,23 +838,38 @@ double GeEllipArc2d::paramAtLength(double datumParam, double length) const {
     return this->paramAtLength(datumParam, length, GeContext::gTol.equalPoint()); 
 }
 double GeEllipArc2d::paramAtLength(double datumParam, double length, double tol) const {
+    if (std::fabs(length) <= tol) {
+        return ellip2d_normalize_param(datumParam);
+    }
+
     double total = 0.0;
     double currentParam = datumParam;
+    const int numSegments = 256;
+    const double step = (PI * 2.0) / numSegments;
+    const double direction = length >= 0.0 ? 1.0 : -1.0;
+    const double targetLen = std::fabs(length);
     GePoint2d prevPoint = this->evalPoint(currentParam);
 
-    for (int i = 1; i <= 256; i++) {
-        double nextParam = datumParam + (PI * 2.0) / 256.0 * i;
+    for (int i = 1; i <= numSegments; i++) {
+        double nextParam = datumParam + direction * step * i;
         GePoint2d nextPoint = this->evalPoint(nextParam);
         double segLen = prevPoint.distanceTo(nextPoint);
 
-        if (total + segLen >= length) {
-            while (nextParam >= PI * 2.0) {
-                nextParam -= PI * 2.0;
+        if (total + segLen >= targetLen) {
+            double remain = targetLen - total;
+            double ratio = 0.0;
+            if (segLen > tol) {
+                ratio = remain / segLen;
             }
-            while (nextParam < 0.0) {
-                nextParam += PI * 2.0;
+            if (ratio < 0.0) {
+                ratio = 0.0;
             }
-            return nextParam;
+            if (ratio > 1.0) {
+                ratio = 1.0;
+            }
+
+            double hitParam = currentParam + (nextParam - currentParam) * ratio;
+            return ellip2d_normalize_param(hitParam);
         }
 
         total += segLen;
@@ -577,13 +877,7 @@ double GeEllipArc2d::paramAtLength(double datumParam, double length, double tol)
         currentParam = nextParam;
     }
 
-    while (currentParam >= PI * 2.0) {
-        currentParam -= PI * 2.0;
-    }
-    while (currentParam < 0.0) {
-        currentParam += PI * 2.0;
-    }
-    return currentParam;
+    return ellip2d_normalize_param(currentParam);
 }
 double GeEllipArc2d::distanceTo(const GePoint2d& point) const
 {
@@ -633,22 +927,42 @@ GePoint2d GeEllipArc2d::closestPointTo(const GePoint2d& pnt) const {
 GePoint2d GeEllipArc2d::closestPointTo(const GePoint2d& pnt, const GeTol& tol) const {
     GePoint2d closest;
 
-    do
-    {
-        //获得圆弧和垂线是否存在交点
-        GePoint2dArray intersects = this->intersectWith(GeLineSeg2d(pnt, this->center()), tol);
-        if (intersects.length() > 0) {
-            closest.set(intersects[0].x, intersects[0].y);
-            break;
+    double sweep = ellip2d_param_sweep(*this, tol);
+    if (sweep <= tol.equalPoint()) {
+        closest = this->startPoint();
+        if (pnt.distanceTo(this->endPoint()) < pnt.distanceTo(this->startPoint())) {
+            closest = this->endPoint();
         }
+        return closest;
+    }
 
-        double dist = pnt.distanceTo(this->startPoint());
-        closest.set(this->startPoint().x, this->startPoint().y);
-        if (pnt.distanceTo(this->endPoint()) < dist) {
-            closest.set(this->endPoint().x, this->endPoint().y);
+    const int numSegments = 256;
+    const double startParam = this->startAng();
+    int bestIndex = 0;
+    double bestDist2 = 0.0;
+    for (int i = 0; i <= numSegments; i++) {
+        double param = startParam + sweep * i / numSegments;
+        double dist2 = ellip2d_point_dist2(*this, pnt, param);
+        if (i == 0 || dist2 < bestDist2) {
+            bestDist2 = dist2;
+            bestIndex = i;
         }
+    }
 
-    } while (false);
+    int leftIndex = bestIndex > 0 ? bestIndex - 1 : bestIndex;
+    int rightIndex = bestIndex < numSegments ? bestIndex + 1 : bestIndex;
+    double leftParam = startParam + sweep * leftIndex / numSegments;
+    double rightParam = startParam + sweep * rightIndex / numSegments;
+    if (rightParam < leftParam) {
+        rightParam = leftParam;
+    }
+
+    double bestParam = leftParam;
+    if (rightParam > leftParam + tol.equalPoint()) {
+        bestParam = ellip2d_refine_point_min_param(*this, pnt, leftParam, rightParam);
+    }
+
+    closest = ellip2d_eval_point(*this, bestParam);
 
     return closest;
 }
@@ -658,54 +972,38 @@ GePoint2d GeEllipArc2d::closestPointTo(const GeLine2d& curve2d, GePoint2d& pntOn
 GePoint2d GeEllipArc2d::closestPointTo(const GeLine2d& curve2d, GePoint2d& pntOnOtherCrv, const GeTol& tol) const {
     GePoint2d closest;
 
-    do
-    {
-        GePoint2dArray intersects = this->intersectWith(curve2d, tol);
-        if (intersects.length() > 0) {
-            pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
-            closest.set(intersects[0].x, intersects[0].y);
-            break;
+    GePoint2dArray intersects = this->intersectWith(curve2d, tol);
+    if (intersects.length() > 0) {
+        pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
+        closest.set(intersects[0].x, intersects[0].y);
+        return closest;
+    }
+
+    GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+    if (points.length() == 0) {
+        GePoint2d startPoint = this->startPoint();
+        GePoint2d endPoint = this->endPoint();
+        GePoint2d startOther = curve2d.closestPointTo(startPoint, tol);
+        GePoint2d endOther = curve2d.closestPointTo(endPoint, tol);
+        closest = startPoint;
+        pntOnOtherCrv = startOther;
+        if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther)) {
+            closest = endPoint;
+            pntOnOtherCrv = endOther;
         }
+        return closest;
+    }
 
-
-        GePoint2dArray pointItselfs, pointOthers;
-        pointItselfs.append(this->startPoint());
-        pointOthers.append(curve2d.closestPointTo(this->startPoint(), tol));
-        pointItselfs.append(this->endPoint());
-        pointOthers.append(curve2d.closestPointTo(this->endPoint(), tol));
-
-        //获得圆弧和垂线是否存在交点
-        GePoint2d vertical = GeLine2d::vertical(this->center(), curve2d);
-        intersects = this->intersectWith(GeLineSeg2d(vertical, this->center()), tol);
-        if (intersects.length() > 0) {
-            if (this->isOn(intersects[0], tol) == true) {
-                pointItselfs.append(intersects[0]);
-            }
-            if (curve2d.isOn(vertical, tol) == true) {
-                pointOthers.append(vertical);
-            }
+    double minDist = 0.0;
+    for (int i = 0; i < points.length(); i++) {
+        GePoint2d other = curve2d.closestPointTo(points[i], tol);
+        double dist = points[i].distanceTo(other);
+        if (i == 0 || dist < minDist) {
+            minDist = dist;
+            closest = points[i];
+            pntOnOtherCrv = other;
         }
-
-        double minDist = 0.0;
-        for (int i = 0; i < pointItselfs.length(); i++) {
-            for (int u = 0; u < pointOthers.length(); u++) {
-                double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-                if (i == 0 && u == 0) {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                    continue;
-                }
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                }
-            }
-        }
-
-    } while (false);
+    }
 
     return closest;
 }
@@ -715,57 +1013,38 @@ GePoint2d GeEllipArc2d::closestPointTo(const GeLineSeg2d& curve2d, GePoint2d& pn
 GePoint2d GeEllipArc2d::closestPointTo(const GeLineSeg2d& curve2d, GePoint2d& pntOnOtherCrv, const GeTol& tol) const {
     GePoint2d closest;
 
-    do
-    {
-        GePoint2dArray intersects = this->intersectWith(curve2d, tol);
-        if (intersects.length() > 0) {
-            pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
-            closest.set(intersects[0].x, intersects[0].y);
-            break;
+    GePoint2dArray intersects = this->intersectWith(curve2d, tol);
+    if (intersects.length() > 0) {
+        pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
+        closest.set(intersects[0].x, intersects[0].y);
+        return closest;
+    }
+
+    GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+    if (points.length() == 0) {
+        GePoint2d startPoint = this->startPoint();
+        GePoint2d endPoint = this->endPoint();
+        GePoint2d startOther = curve2d.closestPointTo(startPoint, tol);
+        GePoint2d endOther = curve2d.closestPointTo(endPoint, tol);
+        closest = startPoint;
+        pntOnOtherCrv = startOther;
+        if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther)) {
+            closest = endPoint;
+            pntOnOtherCrv = endOther;
         }
+        return closest;
+    }
 
-        GePoint2dArray pointItselfs, pointOthers;
-        pointItselfs.append(this->closestPointTo(curve2d.startPoint(), tol));
-        pointOthers.append(curve2d.startPoint());
-        pointItselfs.append(this->closestPointTo(curve2d.endPoint(), tol));
-        pointOthers.append(curve2d.endPoint());
-        pointItselfs.append(this->startPoint());
-        pointOthers.append(curve2d.closestPointTo(this->startPoint(), tol));
-        pointItselfs.append(this->endPoint());
-        pointOthers.append(curve2d.closestPointTo(this->endPoint(), tol));
-
-        //获得圆弧和垂线是否存在交点
-        GePoint2d vertical = GeLine2d::vertical(this->center(), curve2d);
-        intersects = this->intersectWith(GeLineSeg2d(vertical, this->center()), tol);
-        if (intersects.length() > 0) {
-            if (this->isOn(intersects[0], tol) == true) {
-                pointItselfs.append(intersects[0]);
-            }
-            if (curve2d.isOn(vertical, tol) == true) {
-                pointOthers.append(vertical);
-            }
+    double minDist = 0.0;
+    for (int i = 0; i < points.length(); i++) {
+        GePoint2d other = curve2d.closestPointTo(points[i], tol);
+        double dist = points[i].distanceTo(other);
+        if (i == 0 || dist < minDist) {
+            minDist = dist;
+            closest = points[i];
+            pntOnOtherCrv = other;
         }
-
-        double minDist = 0.0;
-        for (int i = 0; i < pointItselfs.length(); i++) {
-            for (int u = 0; u < pointOthers.length(); u++) {
-                double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-                if (i == 0 && u == 0) {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                    continue;
-                }
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                }
-            }
-        }
-
-    } while (false);
+    }
 
     return closest;
 }
@@ -775,55 +1054,38 @@ GePoint2d GeEllipArc2d::closestPointTo(const GeRay2d& curve2d, GePoint2d& pntOnO
 GePoint2d GeEllipArc2d::closestPointTo(const GeRay2d& curve2d, GePoint2d& pntOnOtherCrv, const GeTol& tol) const {
     GePoint2d closest;
 
-    do
-    {
-        GePoint2dArray intersects = this->intersectWith(curve2d, tol);
-        if (intersects.length() > 0) {
-            pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
-            closest.set(intersects[0].x, intersects[0].y);
-            break;
+    GePoint2dArray intersects = this->intersectWith(curve2d, tol);
+    if (intersects.length() > 0) {
+        pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
+        closest.set(intersects[0].x, intersects[0].y);
+        return closest;
+    }
+
+    GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+    if (points.length() == 0) {
+        GePoint2d startPoint = this->startPoint();
+        GePoint2d endPoint = this->endPoint();
+        GePoint2d startOther = curve2d.closestPointTo(startPoint, tol);
+        GePoint2d endOther = curve2d.closestPointTo(endPoint, tol);
+        closest = startPoint;
+        pntOnOtherCrv = startOther;
+        if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther)) {
+            closest = endPoint;
+            pntOnOtherCrv = endOther;
         }
+        return closest;
+    }
 
-        GePoint2dArray pointItselfs, pointOthers;
-        pointItselfs.append(this->closestPointTo(curve2d.pointOnLine(), tol));
-        pointOthers.append(curve2d.pointOnLine());
-        pointItselfs.append(this->startPoint());
-        pointOthers.append(curve2d.closestPointTo(this->startPoint(), tol));
-        pointItselfs.append(this->endPoint());
-        pointOthers.append(curve2d.closestPointTo(this->endPoint(), tol));
-
-        //获得圆弧和垂线是否存在交点
-        GePoint2d vertical = GeLine2d::vertical(this->center(), curve2d);
-        intersects = this->intersectWith(GeLineSeg2d(vertical, this->center()), tol);
-        if (intersects.length() > 0) {
-            if (this->isOn(intersects[0], tol) == true) {
-                pointItselfs.append(intersects[0]);
-            }
-            if (curve2d.isOn(vertical, tol) == true) {
-                pointOthers.append(vertical);
-            }
+    double minDist = 0.0;
+    for (int i = 0; i < points.length(); i++) {
+        GePoint2d other = curve2d.closestPointTo(points[i], tol);
+        double dist = points[i].distanceTo(other);
+        if (i == 0 || dist < minDist) {
+            minDist = dist;
+            closest = points[i];
+            pntOnOtherCrv = other;
         }
-
-        double minDist = 0.0;
-        for (int i = 0; i < pointItselfs.length(); i++) {
-            for (int u = 0; u < pointOthers.length(); u++) {
-                double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-                if (i == 0 && u == 0) {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                    continue;
-                }
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                }
-            }
-        }
-
-    } while (false);
+    }
 
     return closest;
 }
@@ -833,55 +1095,38 @@ GePoint2d GeEllipArc2d::closestPointTo(const GeCircArc2d& curve2d, GePoint2d& pn
 GePoint2d GeEllipArc2d::closestPointTo(const GeCircArc2d& curve2d, GePoint2d& pntOnOtherCrv, const GeTol& tol) const {
     GePoint2d closest;
 
-    do
-    {
-        GePoint2dArray intersects = this->intersectWith(curve2d, tol);
-        if (intersects.length() > 0) {
-            pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
-            closest.set(intersects[0].x, intersects[0].y);
-            break;
-        }
+    GePoint2dArray intersects = this->intersectWith(curve2d, tol);
+    if (intersects.length() > 0) {
+        pntOnOtherCrv.set(intersects[0].x, intersects[0].y);
+        closest.set(intersects[0].x, intersects[0].y);
+        return closest;
+    }
 
-        GePoint2dArray pointItselfs, pointOthers;
-        pointItselfs.append(this->closestPointTo(curve2d.startPoint(), tol));
-        pointOthers.append(curve2d.startPoint());
-        pointItselfs.append(this->closestPointTo(curve2d.endPoint(), tol));
-        pointOthers.append(curve2d.endPoint());
-        pointItselfs.append(this->startPoint());
-        pointOthers.append(curve2d.closestPointTo(this->startPoint(), tol));
-        pointItselfs.append(this->endPoint());
-        pointOthers.append(curve2d.closestPointTo(this->endPoint(), tol));
-
-        //获得圆弧和垂线是否存在交点
-        intersects = this->intersectWith(GeLineSeg2d(this->center(), curve2d.center()), tol);
-        for (int i = 0; i < intersects.length(); i++) {
-            pointItselfs.append(intersects[i]);
+    GePoint2dArray points = GeEllipArc2d::toLineSegment(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
+    if (points.length() == 0) {
+        GePoint2d startPoint = this->startPoint();
+        GePoint2d endPoint = this->endPoint();
+        GePoint2d startOther = curve2d.closestPointTo(startPoint, tol);
+        GePoint2d endOther = curve2d.closestPointTo(endPoint, tol);
+        closest = startPoint;
+        pntOnOtherCrv = startOther;
+        if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther)) {
+            closest = endPoint;
+            pntOnOtherCrv = endOther;
         }
-        intersects = curve2d.intersectWith(GeLineSeg2d(this->center(), curve2d.center()), tol);
-        for (int i = 0; i < intersects.length(); i++) {
-            pointOthers.append(intersects[i]);
-        }
+        return closest;
+    }
 
-        double minDist = 0.0;
-        for (int i = 0; i < pointItselfs.length(); i++) {
-            for (int u = 0; u < pointOthers.length(); u++) {
-                double dist = pointItselfs[i].distanceTo(pointOthers[u]);
-                if (i == 0 && u == 0) {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                    continue;
-                }
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                    closest.set(pointItselfs[i].x, pointItselfs[i].y);
-                    pntOnOtherCrv.set(pointOthers[u].x, pointOthers[u].y);
-                }
-            }
+    double minDist = 0.0;
+    for (int i = 0; i < points.length(); i++) {
+        GePoint2d other = curve2d.closestPointTo(points[i], tol);
+        double dist = points[i].distanceTo(other);
+        if (i == 0 || dist < minDist) {
+            minDist = dist;
+            closest = points[i];
+            pntOnOtherCrv = other;
         }
-
-    } while (false);
+    }
 
     return closest;
 }
@@ -909,7 +1154,7 @@ double GeEllipArc2d::paramOf(const GePoint2d& pnt, const GeTol& tol) const {
     GeVector2d vec = pnt - this->center();
     double x = vec.dotProduct(majorDir) / majorRadius;
     double y = vec.dotProduct(minorDir) / minorRadius;
-    return atan2(y, x);
+    return ellip2d_normalize_param(std::atan2(y, x));
 }
 void GeEllipArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCurveList) const {
     return this->getTrimmedOffset(distance, offsetCurveList, Ge::OffsetCrvExtType::kExtend);
@@ -919,8 +1164,8 @@ void GeEllipArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetC
 }
 void GeEllipArc2d::getTrimmedOffset(double distance, GeVoidPointerArray& offsetCurveList, Ge::OffsetCrvExtType extensionType, const GeTol& tol) const {
 
-    if (abs(this->minorRadius() + distance) < tol.equalPoint() ||
-        abs(this->majorRadius() + distance) < tol.equalPoint()) {
+    if (this->minorRadius() + distance <= tol.equalPoint() ||
+        this->majorRadius() + distance <= tol.equalPoint()) {
         return;
     }
 
@@ -940,7 +1185,18 @@ bool GeEllipArc2d::isClosed() const {
     return this->isClosed(GeContext::gTol);
 }
 bool GeEllipArc2d::isClosed(const GeTol& tol) const {
-    if (abs(this->endAng() - this->startAng()) - PI * 2 < tol.equalPoint()) {
+    double absSweep = std::fabs(this->endAng() - this->startAng());
+    if (absSweep < 2.0 * PI - tol.equalPoint()) {
+        return false;
+    }
+
+    double turns = absSweep / (2.0 * PI);
+    double nearestTurns = std::floor(turns + 0.5);
+    if (nearestTurns < 1.0) {
+        nearestTurns = 1.0;
+    }
+
+    if (std::fabs(absSweep - nearestTurns * 2.0 * PI) <= tol.equalPoint()) {
         return true;
     }
     return false;

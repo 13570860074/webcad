@@ -1,6 +1,7 @@
 #include "GePoint2d.h"
 #include "GeMatrix2d.h"
 #include "AcString.h"
+#include <cmath>
 
 
 const GePoint2d GePoint2d::kOrigin = GePoint2d(0, 0);
@@ -75,10 +76,10 @@ bool GePoint2d::isEqualTo(const GePoint2d& point) const {
 }
 bool GePoint2d::isEqualTo(const GePoint2d& pnt, const GeTol& tol) const
 {
-	if (abs(pnt.x - this->x) > tol.equalPoint()) {
+	if (std::fabs(pnt.x - this->x) > tol.equalPoint()) {
 		return false;
 	}
-	if (abs(pnt.y - this->y) > tol.equalPoint()) {
+	if (std::fabs(pnt.y - this->y) > tol.equalPoint()) {
 		return false;
 	}
 	return true;

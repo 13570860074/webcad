@@ -137,7 +137,10 @@ add_library(
 	src/Ge/GeScale2d.cpp
 	src/Ge/GeScale3d.cpp
 	src/Ge/GeEntity2d.cpp
+	src/Ge/GeSegmentChain2d.cpp
+	src/Ge/GeSplineEnt2d.cpp
 	src/Ge/GeEntity3d.cpp
+	src/Ge/GeSplineEnt3d.cpp
 	src/Ge/GePointEnt2d.cpp
 	src/Ge/GePointEnt3d.cpp
 	src/Ge/GePointOnCurve2d.cpp
@@ -150,6 +153,7 @@ add_library(
 	src/Ge/GeCircArc2d.cpp
 	src/Ge/GeCircArc3d.cpp
 	src/Ge/GeLine2d.cpp
+	src/Ge/GeClipBoundary2d.cpp
 	src/Ge/GeLine3d.cpp
 	src/Ge/GeLinearEnt2d.cpp
 	src/Ge/GeLinearEnt3d.cpp
@@ -164,8 +168,39 @@ add_library(
 	src/Ge/GePlane.cpp
 	src/Ge/GeBoundedPlane.cpp
 	src/Ge/GeEllipArc2d.cpp
+	src/Ge/GeCubicSplineCurve2d.cpp
+	src/Ge/GeCubicSplineCurve3d.cpp
+	src/Ge/GeExtents2d.cpp
+	src/Ge/GeExtents3d.cpp
+	src/Ge/GePosition2d.cpp
+	src/Ge/GePosition3d.cpp
+	src/Ge/GeCompositeCurve2d.cpp
+	src/Ge/GeCompositeCurve3d.cpp
+	src/Ge/GeAugPolyline3d.cpp
+	src/Ge/GePolyline2d.cpp
+	src/Ge/GePolyline3d.cpp
+	src/Ge/GeCurveSurfInt.cpp
+	src/Ge/GeSurfSurfInt.cpp
+	src/Ge/GeCurveCurveInt2d.cpp
+	src/Ge/GeCurveCurveInt3d.cpp
+	src/Ge/GeOffsetCurve2d.cpp
+	src/Ge/GeCurveBoundary.cpp
+	src/Ge/GeExternalCurve2d.cpp
+	src/Ge/GeExternalCurve3d.cpp
+	src/Ge/GeSurfaceCurve2dTo3d.cpp
+	src/Ge/GeSurfaceCurve3dTo2d.cpp
+	src/Ge/GeExternalSurface.cpp
+	src/Ge/GeExternalBoundedSurface.cpp
+	src/Ge/GeNurbCurve2d.cpp
+	src/Ge/GeNurbCurve3d.cpp
+	src/Ge/GeNurbSurface.cpp
+	src/Ge/GeOffsetCurve3d.cpp
+	src/Ge/GeOffsetSurface.cpp
+	src/Ge/GeRevolvedSurface.cpp
+	src/Ge/GeSpunSurf.cpp
 	src/Ge/GeSphere.cpp
 	src/Ge/GeVertexGenerator.cpp
+	src/Ge/GeUvBox.cpp
 )
 
 

@@ -1,5 +1,6 @@
 #include "GeInterval.h"
 #include <cstdlib>
+#include <cmath>
 #include <vector>
 
 GeInterval::GeInterval() {
@@ -325,10 +326,10 @@ bool GeInterval::operator ==(const GeInterval& otherInterval) const
     if (this->m_bBoundedAbove != otherInterval.m_bBoundedAbove) {
         return false;
     }
-    if (abs(this->m_LowerParam - otherInterval.m_LowerParam) > this->tolerance()) {
+    if (std::fabs(this->m_LowerParam - otherInterval.m_LowerParam) > this->tolerance()) {
         return false;
     }
-    if (abs(this->m_UpperParam - otherInterval.m_UpperParam) > this->tolerance()) {
+    if (std::fabs(this->m_UpperParam - otherInterval.m_UpperParam) > this->tolerance()) {
         return false;
     }
     return true;
@@ -342,14 +343,14 @@ bool GeInterval::isEqualAtUpper(const GeInterval& otherInterval) const
     if (this->m_bBoundedAbove != otherInterval.m_bBoundedAbove) {
         return false;
     }
-    if (abs(this->m_UpperParam - otherInterval.m_UpperParam) > this->tolerance()) {
+    if (std::fabs(this->m_UpperParam - otherInterval.m_UpperParam) > this->tolerance()) {
         return false;
     }
     return true;
 }
 bool GeInterval::isEqualAtUpper(double value) const
 {
-    if (abs(this->m_UpperParam - value) > this->tolerance()) {
+    if (std::fabs(this->m_UpperParam - value) > this->tolerance()) {
         return false;
     }
     return true;

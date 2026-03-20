@@ -8,7 +8,7 @@
 
 
 #if !EMSDK
-typedef AcArray<GeCurve2d> GeCurve2dPtrArray;
+typedef AcArray<GeCurve2d*> GeCurve2dPtrArray;
 #endif
 
 
@@ -22,7 +22,7 @@ public:
     ~GeCurve2dPtrArray() {}
 
 public:
-    ACARRAY_METHODS(GeCurve2d);
+    ACARRAY_METHODS(GeCurve2d*);
 };
 #endif
 

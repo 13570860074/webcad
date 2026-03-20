@@ -1,5 +1,6 @@
 #include "GeScale3d.h"
 #include "GeMatrix3d.h"
+#include <cmath>
 
 
 
@@ -88,15 +89,15 @@ bool GeScale3d::isProportional() const {
     return this->isProportional(GeContext::gTol);
 }
 bool GeScale3d::isProportional(const GeTol& tol) const {
-    if (abs(this->sx - this->sy) > tol.equalPoint())
+    if (std::fabs(this->sx - this->sy) > tol.equalPoint())
     {
         return false;
     }
-    if (abs(this->sx - this->sz) > tol.equalPoint())
+    if (std::fabs(this->sx - this->sz) > tol.equalPoint())
     {
         return false;
     }
-    if (abs(this->sy - this->sz) > tol.equalPoint())
+    if (std::fabs(this->sy - this->sz) > tol.equalPoint())
     {
         return false;
     }
@@ -107,13 +108,13 @@ bool GeScale3d::isEqualTo(const GeScale3d& scaleVec) const {
     return this->isEqualTo(scaleVec, GeContext::gTol);
 }
 bool GeScale3d::isEqualTo(const GeScale3d& scaleVec, const GeTol& tol) const {
-    if (abs(this->sx - scaleVec.sx) > tol.equalPoint()) {
+    if (std::fabs(this->sx - scaleVec.sx) > tol.equalPoint()) {
         return false;
     }
-    if (abs(this->sy - scaleVec.sy) > tol.equalPoint()) {
+    if (std::fabs(this->sy - scaleVec.sy) > tol.equalPoint()) {
         return false;
     }
-    if (abs(this->sz - scaleVec.sz) > tol.equalPoint()) {
+    if (std::fabs(this->sz - scaleVec.sz) > tol.equalPoint()) {
         return false;
     }
     return true;

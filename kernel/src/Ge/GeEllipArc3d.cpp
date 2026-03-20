@@ -10,6 +10,7 @@
 #include "GeMatrix3d.h"
 #include "GePlane.h"
 #include "GeImpl.h"
+#include <cmath>
 
 namespace
 {
@@ -153,7 +154,7 @@ namespace
 		double b = 2.0 * ((x0 * dx) / (majorRadius * majorRadius) + (y0 * dy) / (minorRadius * minorRadius));
 		double c = (x0 * x0) / (majorRadius * majorRadius) + (y0 * y0) / (minorRadius * minorRadius) - 1.0;
 
-		if (fabs(a) <= tol.equalVector())
+		if (std::fabs(a) <= tol.equalVector())
 		{
 			return false;
 		}
@@ -164,7 +165,7 @@ namespace
 			return false;
 		}
 
-		if (fabs(discriminant) <= tol.equalPoint())
+		if (std::fabs(discriminant) <= tol.equalPoint())
 		{
 			double lineParam = -b / (2.0 * a);
 			GePoint3d point = line.pointOnLine() + direction * lineParam;
@@ -208,9 +209,9 @@ namespace
 		double denom = normal.dotProduct(direction);
 		double numer = normal.dotProduct(offset);
 
-		if (fabs(denom) <= tol.equalVector())
+		if (std::fabs(denom) <= tol.equalVector())
 		{
-			if (fabs(numer) > tol.equalPoint())
+			if (std::fabs(numer) > tol.equalPoint())
 			{
 				return points;
 			}
@@ -236,7 +237,7 @@ namespace
 
 	double ellip_circle_abs_residual(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, double param)
 	{
-		return fabs(ellip_circle_residual(ellipse, circle, param));
+		return std::fabs(ellip_circle_residual(ellipse, circle, param));
 	}
 
 	double ellip_bisect_circle_param(const GeEllipArc3d& ellipse, const GeCircArc3d& circle, double fromParam, double toParam, const GeTol& tol)
@@ -251,7 +252,7 @@ namespace
 		{
 			midParam = (leftParam + rightParam) * 0.5;
 			double midValue = ellip_circle_residual(ellipse, circle, midParam);
-			if (fabs(midValue) <= tol.equalPoint())
+			if (std::fabs(midValue) <= tol.equalPoint())
 			{
 				break;
 			}
@@ -325,7 +326,7 @@ namespace
 		double startParam = ellipse.startAng();
 		double prevParam = startParam;
 		double prevValue = ellip_circle_residual(ellipse, circle, prevParam);
-		if (fabs(prevValue) <= tol.equalPoint())
+		if (std::fabs(prevValue) <= tol.equalPoint())
 		{
 			GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), prevParam);
 			if (ellipse.isOn(point, tol) == true && circle.isOn(point, tol) == true)
@@ -339,7 +340,7 @@ namespace
 			double currentParam = startParam + sweep * i / numSegments;
 			double currentValue = ellip_circle_residual(ellipse, circle, currentParam);
 
-			if (fabs(currentValue) <= tol.equalPoint())
+			if (std::fabs(currentValue) <= tol.equalPoint())
 			{
 				GePoint3d point = ellip_eval_point(ellipse.center(), ellipse.majorAxis(), ellipse.minorAxis(), currentParam);
 				if (ellipse.isOn(point, tol) == true && circle.isOn(point, tol) == true)
@@ -362,7 +363,7 @@ namespace
 			{
 				double nextParam = startParam + sweep * (i + 1) / numSegments;
 				double nextValue = ellip_circle_residual(ellipse, circle, nextParam);
-				if (fabs(currentValue) <= fabs(prevValue) && fabs(currentValue) <= fabs(nextValue))
+				if (std::fabs(currentValue) <= std::fabs(prevValue) && std::fabs(currentValue) <= std::fabs(nextValue))
 				{
 					double param = ellip_refine_circle_min_param(ellipse, circle, prevParam, nextParam);
 					if (ellip_circle_abs_residual(ellipse, circle, param) <= tol.equalPoint())
@@ -515,7 +516,7 @@ Adesk::Boolean GeEllipArc3d::isCircular() const
 }
 Adesk::Boolean GeEllipArc3d::isCircular(const GeTol& tol) const
 {
-	if (abs(this->majorRadius() - this->minorRadius()) < tol.equalVector())
+	if (std::fabs(this->majorRadius() - this->minorRadius()) < tol.equalVector())
 	{
 		return true;
 	}
@@ -645,8 +646,25 @@ GeEllipArc3d& GeEllipArc3d::setMinorRadius(double rad)
 }
 GeEllipArc3d& GeEllipArc3d::setAngles(double startAngle, double endAngle)
 {
-	GE_IMP_ELLIPARC3D(this->m_pImpl)->startAngle = startAngle;
-	GE_IMP_ELLIPARC3D(this->m_pImpl)->endAngle = endAngle;
+	double sweep = endAngle - startAngle;
+	double absSweep = std::fabs(sweep);
+	double start = std::fmod(startAngle, 2.0 * PI);
+	if (start < 0.0)
+	{
+		start += 2.0 * PI;
+	}
+	double end = std::fmod(endAngle, 2.0 * PI);
+	if (end < 0.0)
+	{
+		end += 2.0 * PI;
+	}
+	if (absSweep >= 2.0 * PI - GeContext::gTol.equalPoint())
+	{
+		end = start + (sweep >= 0.0 ? 2.0 * PI : -2.0 * PI);
+	}
+
+	GE_IMP_ELLIPARC3D(this->m_pImpl)->startAngle = start;
+	GE_IMP_ELLIPARC3D(this->m_pImpl)->endAngle = end;
 	return *this;
 }
 GeEllipArc3d& GeEllipArc3d::set(const GePoint3d& cent, const GeVector3d& unitNormal, const GeVector3d& majorAxis, double majorRadius, double minorRadius)
@@ -683,8 +701,7 @@ GeEllipArc3d& GeEllipArc3d::set(const GePoint3d& cent, const GeVector3d& unitNor
 	GE_IMP_ELLIPARC3D(this->m_pImpl)->center = cent;
 	GE_IMP_ELLIPARC3D(this->m_pImpl)->majorAxis = major;
 	GE_IMP_ELLIPARC3D(this->m_pImpl)->minorAxis = minor;
-	GE_IMP_ELLIPARC3D(this->m_pImpl)->startAngle = startAngle;
-	GE_IMP_ELLIPARC3D(this->m_pImpl)->endAngle = endAngle;
+	this->setAngles(startAngle, endAngle);
 	return *this;
 }
 GeEllipArc3d& GeEllipArc3d::set(const GeCircArc3d& arc)
@@ -743,6 +760,19 @@ bool GeEllipArc3d::isEqualTo(const GeEllipArc3d& entity) const
 }
 bool GeEllipArc3d::isEqualTo(const GeEllipArc3d& entity, const GeTol& tol) const
 {
+	auto angleDiff = [](double a, double b) {
+		double diff = std::fmod(a - b, 2.0 * PI);
+		if (diff < 0.0)
+		{
+			diff += 2.0 * PI;
+		}
+		if (diff > PI)
+		{
+			diff = 2.0 * PI - diff;
+		}
+		return diff;
+	};
+
 	if (this->center().isEqualTo(entity.center(), tol) == false)
 	{
 		return false;
@@ -755,13 +785,22 @@ bool GeEllipArc3d::isEqualTo(const GeEllipArc3d& entity, const GeTol& tol) const
 	{
 		return false;
 	}
-	if (abs(this->startAng() - entity.startAng()) > tol.equalPoint())
+	bool thisClosed = this->isClosed(tol);
+	bool entityClosed = entity.isClosed(tol);
+	if (thisClosed != entityClosed)
 	{
 		return false;
 	}
-	if (abs(this->endAng() - entity.endAng()) > tol.equalPoint())
+	if (thisClosed == false)
 	{
-		return false;
+		if (angleDiff(this->startAng(), entity.startAng()) > tol.equalPoint())
+		{
+			return false;
+		}
+		if (angleDiff(this->endAng(), entity.endAng()) > tol.equalPoint())
+		{
+			return false;
+		}
 	}
 	return true;
 }
@@ -854,7 +893,7 @@ bool GeEllipArc3d::isOn(const GePoint3d& pnt, const GeTol& tol) const
 	double x = vec.dotProduct(this->majorAxis().normal());
 	double y = vec.dotProduct(this->minorAxis().normal());
 	double res = (x * x) / (majorRadius * majorRadius) + (y * y) / (minorRadius * minorRadius);
-	if (abs(res - 1.0) > tol.equalPoint())
+	if (std::fabs(res - 1.0) > tol.equalPoint())
 	{
 		return false;
 	}
@@ -887,7 +926,17 @@ bool GeEllipArc3d::explode(GeVoidPointerArray& explodedCurves, GeIntArray& newEx
 GeBoundBlock3d GeEllipArc3d::boundBlock() const
 {
 	GeInterval range;
-	range.set(this->startAng(), this->endAng());
+	double start = this->startAng();
+	double end = this->endAng();
+	if (this->isClosed(GeContext::gTol) == true)
+	{
+		end = start + 2.0 * PI;
+	}
+	else if (end < start)
+	{
+		end += 2.0 * PI;
+	}
+	range.set(start, end);
 	return this->boundBlock(range);
 }
 GeBoundBlock3d GeEllipArc3d::boundBlock(const GeInterval& range) const
@@ -897,7 +946,17 @@ GeBoundBlock3d GeEllipArc3d::boundBlock(const GeInterval& range) const
 GeBoundBlock3d GeEllipArc3d::orthoBoundBlock() const
 {
 	GeInterval range;
-	range.set(this->startAng(), this->endAng());
+	double start = this->startAng();
+	double end = this->endAng();
+	if (this->isClosed(GeContext::gTol) == true)
+	{
+		end = start + 2.0 * PI;
+	}
+	else if (end < start)
+	{
+		end += 2.0 * PI;
+	}
+	range.set(start, end);
 	return this->orthoBoundBlock(range);
 }
 GeBoundBlock3d GeEllipArc3d::orthoBoundBlock(const GeInterval& range) const
@@ -968,6 +1027,11 @@ GePoint3d GeEllipArc3d::closestPointTo(const GePoint3d& pnt, const GeTol& tol) c
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
+		closest = this->startPoint();
+		if (pnt.distanceTo(this->endPoint()) < pnt.distanceTo(this->startPoint()))
+		{
+			closest = this->endPoint();
+		}
 		return closest;
 	}
 
@@ -996,6 +1060,17 @@ GePoint3d GeEllipArc3d::closestPointTo(const GeLine3d& curve3d, GePoint3d& pntOn
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
+		GePoint3d startPoint = this->startPoint();
+		GePoint3d endPoint = this->endPoint();
+		GePoint3d startOther = curve3d.closestPointTo(startPoint, tol);
+		GePoint3d endOther = curve3d.closestPointTo(endPoint, tol);
+		closest = startPoint;
+		pntOnOtherCrv = startOther;
+		if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther))
+		{
+			closest = endPoint;
+			pntOnOtherCrv = endOther;
+		}
 		return closest;
 	}
 
@@ -1024,6 +1099,17 @@ GePoint3d GeEllipArc3d::closestPointTo(const GeLineSeg3d& curve3d, GePoint3d& pn
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
+		GePoint3d startPoint = this->startPoint();
+		GePoint3d endPoint = this->endPoint();
+		GePoint3d startOther = curve3d.closestPointTo(startPoint, tol);
+		GePoint3d endOther = curve3d.closestPointTo(endPoint, tol);
+		closest = startPoint;
+		pntOnOtherCrv = startOther;
+		if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther))
+		{
+			closest = endPoint;
+			pntOnOtherCrv = endOther;
+		}
 		return closest;
 	}
 
@@ -1052,6 +1138,17 @@ GePoint3d GeEllipArc3d::closestPointTo(const GeRay3d& curve3d, GePoint3d& pntOnO
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
+		GePoint3d startPoint = this->startPoint();
+		GePoint3d endPoint = this->endPoint();
+		GePoint3d startOther = curve3d.closestPointTo(startPoint, tol);
+		GePoint3d endOther = curve3d.closestPointTo(endPoint, tol);
+		closest = startPoint;
+		pntOnOtherCrv = startOther;
+		if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther))
+		{
+			closest = endPoint;
+			pntOnOtherCrv = endOther;
+		}
 		return closest;
 	}
 
@@ -1080,6 +1177,17 @@ GePoint3d GeEllipArc3d::closestPointTo(const GeCircArc3d& curve3d, GePoint3d& pn
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
+		GePoint3d startPoint = this->startPoint();
+		GePoint3d endPoint = this->endPoint();
+		GePoint3d startOther = curve3d.closestPointTo(startPoint, tol);
+		GePoint3d endOther = curve3d.closestPointTo(endPoint, tol);
+		closest = startPoint;
+		pntOnOtherCrv = startOther;
+		if (endPoint.distanceTo(endOther) < startPoint.distanceTo(startOther))
+		{
+			closest = endPoint;
+			pntOnOtherCrv = endOther;
+		}
 		return closest;
 	}
 
@@ -1148,7 +1256,7 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeLine3d& curve3d, const GeVect
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
-		return closest;
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
 	}
 
 	double minDist = 0.0;
@@ -1181,7 +1289,7 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeLineSeg3d& curve3d, const GeV
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
-		return closest;
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
 	}
 
 	double minDist = 0.0;
@@ -1214,7 +1322,7 @@ GePoint3d GeEllipArc3d::projClosestPointTo(const GeRay3d& curve3d, const GeVecto
 	GePoint3dArray points = ellip_sample_points(this->center(), this->majorAxis(), this->minorAxis(), this->startAng(), this->endAng(), 256);
 	if (points.length() == 0)
 	{
-		return closest;
+		return this->closestPointTo(curve3d, pntOnOtherCrv, tol);
 	}
 
 	double minDist = 0.0;
@@ -1408,7 +1516,20 @@ bool GeEllipArc3d::isClosed() const
 }
 bool GeEllipArc3d::isClosed(const GeTol& tol) const
 {
-	if (abs(this->endAng() - this->startAng()) - PI * 2.0 < tol.equalPoint())
+	double absSweep = std::fabs(this->endAng() - this->startAng());
+	if (absSweep < 2.0 * PI - tol.equalPoint())
+	{
+		return false;
+	}
+
+	double turns = absSweep / (2.0 * PI);
+	double nearestTurns = std::floor(turns + 0.5);
+	if (nearestTurns < 1.0)
+	{
+		nearestTurns = 1.0;
+	}
+
+	if (std::fabs(absSweep - nearestTurns * 2.0 * PI) <= tol.equalPoint())
 	{
 		return true;
 	}

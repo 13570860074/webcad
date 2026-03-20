@@ -2,6 +2,7 @@
 #include "GeMatrix3d.h"
 #include "GePointOnSurface.h"
 #include "GePlane.h"
+#include <cmath>
 
 const GeVector3d GeVector3d::kIdentity = GeVector3d(0, 0, 0); // Additive identity vector.
 const GeVector3d GeVector3d::kXAxis = GeVector3d(1, 0, 0);	  // X-Axis vector.
@@ -62,12 +63,12 @@ GeVector3d &GeVector3d::normalize()
 }
 GeVector3d &GeVector3d::normalize(const GeTol &tol)
 {
-	double Max = sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
-	if (Max > tol.equalPoint())
+	double len = std::sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
+	if (len > tol.equalVector())
 	{
-		this->x = this->x / Max;
-		this->y = this->y / Max;
-		this->z = this->z / Max;
+		this->x = this->x / len;
+		this->y = this->y / len;
+		this->z = this->z / len;
 	}
 	return *this;
 }
@@ -93,29 +94,43 @@ GeVector2d GeVector3d::convert2d(const GePlanarEnt &planarEnt) const
 }
 double GeVector3d::angle(const GeVector3d &vect) const
 {
-	double v1 = abs(this->x * vect.x + this->y * vect.y + this->z * vect.z);
-	double v2 = sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
-	double v3 = sqrt(vect.x * vect.x + vect.y * vect.y + vect.z * vect.z);
-	if (abs(v1 - (v2 * v3)) < 0.000001)
+	GeVector3d v1(*this);
+	GeVector3d v2(vect);
+	if (v1.isZeroLength() || v2.isZeroLength())
 	{
 		return 0.0;
 	}
-	return acos(v1 / (v2 * v3));
+	v1.normalize();
+	v2.normalize();
+	GeVector3d vCross = v1.crossProduct(v2);
+	double dot = std::fabs(v1.dotProduct(v2));
+	double angle = std::atan2(vCross.length(), dot);
+	if (angle < 0.0)
+	{
+		return 0.0;
+	}
+	return angle;
 }
 double GeVector3d::angleTo(const GeVector3d &vec) const
 {
-	double v1 = sqrt((vec.x - this->x) * (vec.x - this->x) + (vec.y - this->y) * (vec.y - this->y) + (vec.z - this->z) * (vec.z - this->z));
-	double v2 = sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
-	double v3 = sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
-	if (abs(v1 - (v2 * v3)) < 0.000001)
+	GeVector3d vThis(*this);
+	GeVector3d vVec(vec);
+	if (vThis.isZeroLength() || vVec.isZeroLength())
 	{
 		return 0.0;
 	}
-	return acos((v2 * v2 + v3 * v3 - v1 * v1) / (2 * v2 * v3));
+	vThis.normalize();
+	vVec.normalize();
+	GeVector3d vCross = vThis.crossProduct(vVec);
+	return std::atan2(vCross.length(), vThis.dotProduct(vVec));
 }
 double GeVector3d::angleToCCW(const GeVector3d &vect) const
 {
-	double Angle = 0;
+	double Angle = 0.0;
+	if (this->isZeroLength() || vect.isZeroLength())
+	{
+		return 0.0;
+	}
 
 	do
 	{
@@ -133,9 +148,21 @@ double GeVector3d::angleToCCW(const GeVector3d &vect) const
 
 		// 获得两向量夹角
 		Angle = v1.angleTo(v2);
+		if (std::fabs(Angle) <= GeContext::gTol.equalVector())
+		{
+			break;
+		}
 
 		// 叉乘得到向量的轴
 		GeVector3d normal = v1.crossProduct(v2);
+		if (normal.isZeroLength())
+		{
+			if (v1.dotProduct(v2) < 0.0)
+			{
+				Angle = PI;
+			}
+			break;
+		}
 
 		// 将矢量旋转
 		v1.rotateBy(Angle, normal);
@@ -152,7 +179,15 @@ double GeVector3d::angleToCCW(const GeVector3d &vect) const
 }
 double GeVector3d::angleToCCW(const GeVector3d &vect, const GeVector3d &normal) const
 {
+	if (this->isZeroLength() || vect.isZeroLength())
+	{
+		return 0.0;
+	}
 	double angle = this->angleTo(vect);
+	if (normal.isZeroLength())
+	{
+		return angle;
+	}
 	GeVector3d tempVec = *this;
 	tempVec.rotateBy(angle, normal);
 	tempVec.normalize();
@@ -196,11 +231,8 @@ bool GeVector3d::isZeroLength() const
 }
 bool GeVector3d::isZeroLength(const GeTol &tol) const
 {
-	if (this->length() < GeContext::gTol.equalVector())
-	{
-		return true;
-	}
-	return false;
+	double tolValue = tol.equalVector();
+	return (this->x * this->x + this->y * this->y + this->z * this->z) <= (tolValue * tolValue);
 }
 bool GeVector3d::isParallelTo(const GeVector3d &vect) const
 {
@@ -208,12 +240,21 @@ bool GeVector3d::isParallelTo(const GeVector3d &vect) const
 }
 bool GeVector3d::isParallelTo(const GeVector3d &vec, const GeTol &tol) const
 {
-	double angle = this->angleTo(vec);
-	if (abs(angle) < tol.equalVector() || abs(angle - PI) < tol.equalVector())
+	double len1 = this->length();
+	double len2 = vec.length();
+	if (len1 <= tol.equalVector())
 	{
-		return true;
+		return len2 <= tol.equalVector();
 	}
-	return false;
+	if (len2 <= tol.equalVector())
+	{
+		return false;
+	}
+	GeVector3d v1(*this);
+	GeVector3d v2(vec);
+	v1 /= len1;
+	v2 /= len2;
+	return v1.isEqualTo(v2, tol) || v1.isEqualTo(-v2, tol);
 }
 bool GeVector3d::isCodirectionalTo(const GeVector3d &vect) const
 {
@@ -221,11 +262,21 @@ bool GeVector3d::isCodirectionalTo(const GeVector3d &vect) const
 }
 bool GeVector3d::isCodirectionalTo(const GeVector3d &vec, const GeTol &tol) const
 {
-	GeVector3d V1(this->x, this->y, this->z);
-	V1.normalize();
-	GeVector3d V2(vec.x, vec.y, vec.z);
-	V2.normalize();
-	return V1.isEqualTo(V2, tol);
+	double len1 = this->length();
+	double len2 = vec.length();
+	if (len1 <= tol.equalVector())
+	{
+		return len2 <= tol.equalVector();
+	}
+	if (len2 <= tol.equalVector())
+	{
+		return false;
+	}
+	GeVector3d v1(*this);
+	GeVector3d v2(vec);
+	v1 /= len1;
+	v2 /= len2;
+	return v1.isEqualTo(v2, tol);
 }
 bool GeVector3d::isPerpendicularTo(const GeVector3d &vect) const
 {
@@ -233,12 +284,19 @@ bool GeVector3d::isPerpendicularTo(const GeVector3d &vect) const
 }
 bool GeVector3d::isPerpendicularTo(const GeVector3d &vec, const GeTol &tol) const
 {
-	double angle = this->angleTo(vec);
-	if (abs(abs(angle) - PI / 2) < tol.equalVector())
+	GeVector3d v1(*this);
+	v1.normalize(tol);
+	if (v1.isZeroLength(tol))
 	{
 		return true;
 	}
-	return false;
+	GeVector3d v2(vec);
+	v2.normalize(tol);
+	if (v2.isZeroLength(tol))
+	{
+		return true;
+	}
+	return std::fabs(v1.dotProduct(v2)) <= tol.equalVector();
 }
 GeVector3d GeVector3d::crossProduct(const GeVector3d &vect) const
 {
@@ -248,6 +306,10 @@ GeMatrix3d GeVector3d::rotateTo(const GeVector3d &vector) const
 {
 
 	GeVector3d vec1 = *this;
+	if (vec1.isZeroLength() || vector.isZeroLength())
+	{
+		return GeMatrix3d::kIdentity;
+	}
 	vec1.normalize();
 	GeVector3d vec2 = vector;
 	vec2.normalize();
@@ -271,7 +333,11 @@ GeMatrix3d GeVector3d::rotateTo(const GeVector3d &vector) const
 	double angle = vec1.angleTo(vec2);
 
 	// 叉乘得到法向
-	GeVector3d normal = vec1.crossProduct(vector);
+	GeVector3d normal = vec1.crossProduct(vec2);
+	if (normal.isZeroLength())
+	{
+		return GeMatrix3d::kIdentity;
+	}
 
 	// 获得矩阵
 	mat.setToRotation(angle, normal);
@@ -286,6 +352,10 @@ GeMatrix3d GeVector3d::rotateTo(const GeVector3d &vector) const
 GeMatrix3d GeVector3d::rotateTo(const GeVector3d &vector, const GeVector3d &axis) const
 {
 	GeVector3d vec1 = *this;
+	if (vec1.isZeroLength() || vector.isZeroLength() || axis.isZeroLength())
+	{
+		return GeMatrix3d::kIdentity;
+	}
 	vec1.normalize();
 	GeVector3d vec2 = vector;
 	vec2.normalize();
@@ -301,6 +371,7 @@ GeMatrix3d GeVector3d::rotateTo(const GeVector3d &vector, const GeVector3d &axis
 
 	// 叉乘得到法向
 	GeVector3d normal = axis;
+	normal.normalize();
 
 	// 获得矩阵
 	GeMatrix3d mat;
@@ -355,15 +426,15 @@ bool GeVector3d::isEqualTo(const GeVector3d &vect) const
 }
 bool GeVector3d::isEqualTo(const GeVector3d &vec, const GeTol &tol) const
 {
-	if (abs(vec.x - this->x) > tol.equalVector())
+	if (std::fabs(vec.x - this->x) > tol.equalVector())
 	{
 		return false;
 	}
-	if (abs(vec.y - this->y) > tol.equalVector())
+	if (std::fabs(vec.y - this->y) > tol.equalVector())
 	{
 		return false;
 	}
-	if (abs(vec.z - this->z) > tol.equalVector())
+	if (std::fabs(vec.z - this->z) > tol.equalVector())
 	{
 		return false;
 	}
@@ -375,11 +446,7 @@ bool GeVector3d::isUnitLength() const
 }
 bool GeVector3d::isUnitLength(const GeTol &tol) const
 {
-	if (this->length() < 1.0 + tol.equalVector())
-	{
-		return true;
-	}
-	return false;
+	return std::fabs(this->length() - 1.0) <= tol.equalVector();
 }
 GeVector3d &GeVector3d::set(const GePlanarEnt &plane, const GeVector2d &vect)
 {

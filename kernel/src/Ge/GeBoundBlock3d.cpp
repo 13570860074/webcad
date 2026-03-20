@@ -5,6 +5,7 @@
 #include "GeBoundedPlane.h"
 #include "GePoint3dArray.h"
 #include "GeImpl.h"
+#include <cmath>
 
 namespace {
 void appendCorners(const GePoint3d& basePoint, const GeVector3d& dir1, const GeVector3d& dir2, const GeVector3d& dir3, GePoint3dArray& points)
@@ -28,7 +29,7 @@ bool containsInParallelepiped(const GePoint3d& basePoint, const GeVector3d& dir1
 {
 	double determinant = tripleProduct(dir1, dir2, dir3);
 	double determinantTol = tol.equalVector() * tol.equalVector() * tol.equalVector();
-	if (fabs(determinant) <= determinantTol)
+	if (std::fabs(determinant) <= determinantTol)
 	{
 		return false;
 	}
@@ -56,7 +57,7 @@ bool containsInFace(const GePoint3d& origin, const GeVector3d& side1, const GeVe
 	}
 
 	GeVector3d offset = point - origin;
-	if (fabs(offset.dotProduct(normal)) > tol.equalPoint() * normalLength)
+	if (std::fabs(offset.dotProduct(normal)) > tol.equalPoint() * normalLength)
 	{
 		return false;
 	}
@@ -91,9 +92,9 @@ bool segmentIntersectsFace(const GePoint3d& startPoint, const GePoint3d& endPoin
 	double endDistance = (endPoint - origin).dotProduct(normal);
 	double denominator = normal.dotProduct(direction);
 
-	if (fabs(denominator) <= tol.equalVector())
+	if (std::fabs(denominator) <= tol.equalVector())
 	{
-		if (fabs(startDistance) > tol.equalPoint() * normalLength || fabs(endDistance) > tol.equalPoint() * normalLength)
+		if (std::fabs(startDistance) > tol.equalPoint() * normalLength || std::fabs(endDistance) > tol.equalPoint() * normalLength)
 		{
 			return false;
 		}
@@ -257,11 +258,19 @@ void GeBoundBlock3d::get(GePoint3d& base, GeVector3d& dir1, GeVector3d& dir2, Ge
 	dir3.set(GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3.x, GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3.y, GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3.z);
 }
 GeBoundBlock3d& GeBoundBlock3d::set(const GePoint3d& p1, const GePoint3d& p2) {
+	GePoint3d minPoint(
+		p1.x < p2.x ? p1.x : p2.x,
+		p1.y < p2.y ? p1.y : p2.y,
+		p1.z < p2.z ? p1.z : p2.z);
+	GePoint3d maxPoint(
+		p1.x > p2.x ? p1.x : p2.x,
+		p1.y > p2.y ? p1.y : p2.y,
+		p1.z > p2.z ? p1.z : p2.z);
 	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->isBox = true;
-	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint = p1;
-	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir1 = GeVector3d(p2.x - p1.x, 0, 0);
-	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir2 = GeVector3d(0, p2.y - p1.y, 0);
-	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3 = GeVector3d(0, 0, p2.z - p1.z);
+	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->basePoint = minPoint;
+	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir1 = GeVector3d(maxPoint.x - minPoint.x, 0, 0);
+	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir2 = GeVector3d(0, maxPoint.y - minPoint.y, 0);
+	GE_IMP_BOUNDBLOCK3D(this->m_pImpl)->dir3 = GeVector3d(0, 0, maxPoint.z - minPoint.z);
 	return *this;
 }
 GeBoundBlock3d& GeBoundBlock3d::set(const GePoint3d& base, const GeVector3d& dir1, const GeVector3d& dir2, const GeVector3d& dir3) {
@@ -502,5 +511,8 @@ bool GeBoundBlock3d::isOn(const GePoint3d& pnt) const {
 	return this->isOn(pnt, GeContext::gTol);
 }
 bool GeBoundBlock3d::isOn(const GePoint3d& pnt, const GeTol& tol) const {
-	return this->contains(pnt);
+	GePoint3d basePoint;
+	GeVector3d dir1, dir2, dir3;
+	this->get(basePoint, dir1, dir2, dir3);
+	return containsInParallelepiped(basePoint, dir1, dir2, dir3, pnt, tol);
 }

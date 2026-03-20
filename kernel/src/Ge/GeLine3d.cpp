@@ -10,6 +10,7 @@
 #include "GePlane.h"
 #include "GeMatrix3d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 const GeLine3d GeLine3d::kXAxis = GeLine3d(GePoint3d(0, 0, 0), GeVector3d(1, 0, 0));
 const GeLine3d GeLine3d::kYAxis = GeLine3d(GePoint3d(0, 0, 0), GeVector3d(0, 1, 0));
@@ -193,8 +194,13 @@ double GeLine3d::paramAtLength(double datumParam, double length) const
 double GeLine3d::paramAtLength(double datumParam, double length, double tol) const
 {
 	double param = 0.0;
+	double lineLen = this->length();
+	if (std::fabs(lineLen) <= tol)
+	{
+		return datumParam;
+	}
 
-	param = datumParam + length / this->length();
+	param = datumParam + length / lineLen;
 
 	return param;
 }
@@ -690,30 +696,15 @@ double GeLine3d::paramOf(const GePoint3d& pnt) const
 double GeLine3d::paramOf(const GePoint3d& pnt, const GeTol& tol) const
 {
 
-	double param = 0.0;
-
-	do
+	GeVector3d dir = this->direction();
+	double denom = dir.dotProduct(dir);
+	if (std::fabs(denom) <= tol.equalVector() * tol.equalVector())
 	{
-		GeLine3d line(this->pointOnLine(), this->direction());
-		if (line.isOn(pnt, tol) == false)
-		{
-			break;
-		}
+		return 0.0;
+	}
 
-		GeVector3d direction = pnt - this->pointOnLine();
-		direction.normalize();
-		if (direction.isEqualTo(this->direction(), tol) == true)
-		{
-			param = (pnt.distanceTo(this->pointOnLine())) / this->length();
-		}
-		else
-		{
-			param = 0 - (pnt.distanceTo(this->pointOnLine())) / this->length();
-		}
-
-	} while (false);
-
-	return param;
+	GeVector3d delta = pnt - this->pointOnLine();
+	return delta.dotProduct(dir) / denom;
 }
 void GeLine3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, GeVoidPointerArray& offsetCurveList) const
 {
@@ -725,7 +716,7 @@ void GeLine3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, 
 }
 void GeLine3d::getTrimmedOffset(double distance, const GeVector3d& planeNormal, GeVoidPointerArray& offsetCurveList, Ge::OffsetCrvExtType extensionType, const GeTol& tol) const
 {
-	if (abs(distance) < 0.0000001)
+	if (std::fabs(distance) <= tol.equalPoint())
 	{
 		GeLine3d* line = new GeLine3d();
 		line->set(GE_IMP_LINEARENT3D(this->m_pImpl)->origin, GE_IMP_LINEARENT3D(this->m_pImpl)->vector);
@@ -1036,45 +1027,34 @@ bool GeLine3d::intersectWith(const GeLine3d& line, GePoint3d& intPnt) const
 }
 bool GeLine3d::intersectWith(const GeLine3d& line, GePoint3d& intPnt, const GeTol& tol) const
 {
+	GeVector3d u = this->direction();
+	GeVector3d v = line.direction();
+	GeVector3d w = this->pointOnLine() - line.pointOnLine();
 
-	bool isValue = true;
+	double a = u.dotProduct(u);
+	double b = u.dotProduct(v);
+	double c = v.dotProduct(v);
+	double d = u.dotProduct(w);
+	double e = v.dotProduct(w);
+	double denom = a * c - b * b;
 
-	do
+	if (std::fabs(denom) <= tol.equalVector() * tol.equalVector())
 	{
-		//判断是否平行
-		if (GE_IMP_LINEARENT3D(this->m_pImpl)->vector.isParallelTo(GE_IMP_LINEARENT3D(line.m_pImpl)->vector) == true)
-		{
-			isValue = false;
-			break;
-		}
+		return false;
+	}
 
-		//求直线点1到直线2的垂点
-		GePoint3d vertical = GeLinearEnt3d::vertical(GE_IMP_LINEARENT3D(this->m_pImpl)->origin, line);
-		if (vertical.isEqualTo(GE_IMP_LINEARENT3D(this->m_pImpl)->origin, tol) == true) {
-			intPnt.set(vertical.x, vertical.y, vertical.z);
-			break;
-		}
+	double s = (b * e - c * d) / denom;
+	double t = (a * e - b * d) / denom;
 
-		// 获得两直线的夹角
-		double angle = this->direction().angleTo(line.direction());
+	GePoint3d pOnThis = this->pointOnLine() + u * s;
+	GePoint3d pOnLine = line.pointOnLine() + v * t;
+	if (pOnThis.distanceTo(pOnLine) > tol.equalPoint())
+	{
+		return false;
+	}
 
-		// 得到邻边长度
-		double dist = this->pointOnLine().distanceTo(vertical);
-		dist = dist / tan(angle);
-
-		// 获得交点
-		GeVector3d direction = line.direction();
-		GePoint3d intersect = vertical + direction * dist;
-		if (this->isOn(intersect, tol) == false)
-		{
-			intersect = vertical - direction * dist;
-		}
-		intPnt.x = intersect.x;
-		intPnt.y = intersect.y;
-
-} while (false);
-
-	return isValue;
+	intPnt = pOnThis;
+	return true;
 
 
 #if 0
@@ -1092,7 +1072,7 @@ double e = v.dotProduct(w);
 double denom = a * c - b * b;
 
 // 检查分母，如果为0，线是平行的
-if (fabs(denom) < GeContext::gTol.equalVector())
+if (std::fabs(denom) < GeContext::gTol.equalVector())
 {
 	return false;
 }

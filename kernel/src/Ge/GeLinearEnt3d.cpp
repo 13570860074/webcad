@@ -4,6 +4,7 @@
 #include "GePlane.h"
 #include "GePlanarEnt.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 
@@ -31,10 +32,10 @@ GePoint3d GeLinearEnt3d::vertical(const GePoint3d& pt, const GeLinearEnt3d& line
 	vec.normalize();
 	GeVector3d bb = GE_IMP_LINEARENT3D(line.m_pImpl)->vector.normal();
 	double angle = vec.angle(GE_IMP_LINEARENT3D(line.m_pImpl)->vector.normal());
-	if (abs(angle - PI) < tol.equalPoint() || abs(angle) < tol.equalPoint()) {
+	if (std::fabs(angle - PI) < tol.equalPoint() || std::fabs(angle) < tol.equalPoint()) {
 		return pt;
 	}
-	if (abs(angle - PI / 2) < tol.equalPoint())
+	if (std::fabs(angle - PI / 2) < tol.equalPoint())
 	{
 		return GE_IMP_LINEARENT3D(line.m_pImpl)->origin;
 	}
@@ -159,7 +160,7 @@ bool GeLinearEnt3d::isPerpendicularTo(const GeLinearEnt3d& line) const {
 bool GeLinearEnt3d::isPerpendicularTo(const GeLinearEnt3d& line, const GeTol& tol) const
 {
 	double angle = GE_IMP_LINEARENT3D(this->m_pImpl)->vector.angleTo(GE_IMP_LINEARENT3D(line.m_pImpl)->vector);
-	if (abs(angle - PI / 2) < tol.equalPoint() || abs(angle - PI / 2 * 2) < tol.equalPoint())
+	if (std::fabs(angle - PI / 2) < tol.equalPoint() || std::fabs(angle - PI / 2 * 2) < tol.equalPoint())
 	{
 		return true;
 	}

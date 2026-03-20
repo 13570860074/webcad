@@ -2,6 +2,7 @@
 #include "GeLine2d.h"
 #include "GePoint2d.h"
 #include "GePoint3dArray.h"
+#include <cmath>
 
 GePoint2d GeMath::vertical(const GePoint2d& pt, const GePoint2d& begin, const GePoint2d& end, const GeTol& tol)
 {
@@ -9,7 +10,7 @@ GePoint2d GeMath::vertical(const GePoint2d& pt, const GePoint2d& begin, const Ge
 
 	double dx = begin.x - end.x;
 	double dy = begin.y - end.y;
-	if (abs(dx) < tol.equalPoint() && abs(dy) < tol.equalPoint())
+	if (std::fabs(dx) < tol.equalPoint() && std::fabs(dy) < tol.equalPoint())
 	{
 		retVal = begin;
 		return retVal;
@@ -27,17 +28,15 @@ GePoint2d GeMath::vertical(const GePoint2d& pt, const GePoint2d& begin, const Ge
 
 int GeMath::lineDirection(const GePoint2d& pt, const GePoint2d& lineStartPoint, const GePoint2d& lineEndPoint)
 {
-	if (abs((lineEndPoint.x - lineStartPoint.x)) < 0.00001)
+	double dx = lineEndPoint.x - lineStartPoint.x;
+	double dy = lineEndPoint.y - lineStartPoint.y;
+	if (std::fabs(dx) <= GeContext::gTol.equalPoint() && std::fabs(dy) <= GeContext::gTol.equalPoint())
 	{
-		if (pt.x < lineStartPoint.x)
-		{
-			return 0;
-		}
 		return 1;
 	}
-	double m = (lineEndPoint.y - lineStartPoint.y) / (lineEndPoint.x - lineStartPoint.x);
-	double b = lineStartPoint.y - m * lineStartPoint.x;
-	if (pt.y > m * pt.x + b)
+
+	double crossVal = dx * (pt.y - lineStartPoint.y) - dy * (pt.x - lineStartPoint.x);
+	if (crossVal > GeContext::gTol.equalPoint())
 	{
 		return 0;
 	}
@@ -115,6 +114,12 @@ GePoint3d GeMath::mindPoint(const GePoint3dArray& pts)
 	return minPoint + (maxPoint - minPoint) / 2.0;
 }
 void GeMath::extents(const GePoint2dArray& pts, GePoint2d& _minPoint, GePoint2d& _maxPoint) {
+	if (pts.length() <= 0) {
+		_minPoint = GePoint2d::kOrigin;
+		_maxPoint = GePoint2d::kOrigin;
+		return;
+	}
+
 	for (int i = 0; i < pts.length(); i++) {
 		if (i == 0) {
 			_minPoint = pts.at(0);
@@ -143,59 +148,56 @@ bool GeMath::lineFitting(const GePoint2dArray& pts, GePoint2d& _startPoint, GePo
 		return false;
 	}
 
-	double sum_x = 0.0, sum_y = 0.0, sum_xy = 0.0, sum_xx = 0.0;
+	double sum_x = 0.0;
+	double sum_y = 0.0;
 	for (int i = 0; i < pts.length(); i++) {
 		sum_x += pts.at(i).x;
 		sum_y += pts.at(i).y;
-		sum_xy += pts.at(i).x * pts.at(i).y;
-		sum_xx += pts.at(i).x * pts.at(i).x;
 	}
 
 	double mean_x = sum_x / n;
 	double mean_y = sum_y / n;
+	double sxx = 0.0;
+	double syy = 0.0;
+	double sxy = 0.0;
+	for (int i = 0; i < pts.length(); i++) {
+		double cx = pts.at(i).x - mean_x;
+		double cy = pts.at(i).y - mean_y;
+		sxx += cx * cx;
+		syy += cy * cy;
+		sxy += cx * cy;
+	}
 
-	// Calculate the slope and intercept using the least squares formulas  
-	double slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
-	double intercept = mean_y - slope * mean_x;
+	if (sxx <= GeContext::gTol.equalPoint() && syy <= GeContext::gTol.equalPoint()) {
+		return false;
+	}
 
-	// 计算直线
-	GePoint2d p1, p2;
-	p1.x = pts.at(0).x;
-	p1.y = slope * p1.x + intercept;
-	p2.x = pts.at(pts.length() - 1).x;
-	p2.y = slope * p2.x + intercept;
+	double theta = 0.5 * std::atan2(2.0 * sxy, sxx - syy);
+	double dirX = std::cos(theta);
+	double dirY = std::sin(theta);
 
-	// 获得包围盒
-	GePoint2d minPoint, maxPoint;
-	extents(pts, minPoint, maxPoint);
-
-	// 计算基点
-	GePoint2d basePoint = minPoint;
-	basePoint.x -= (maxPoint.x - minPoint.x);
-	basePoint.y -= (maxPoint.y - minPoint.y);
-	basePoint = GeMath::vertical(basePoint, p1, p2);
-
-	// 计算开始坐标
 	double minVal = 0.0;
 	double maxVal = 0.0;
 	for (int i = 0; i < pts.length(); i++) {
-		GePoint2d ps = GeMath::vertical(pts.at(i), p1, p2);
-		double dist = basePoint.distanceTo(ps);
+		double proj = (pts.at(i).x - mean_x) * dirX + (pts.at(i).y - mean_y) * dirY;
 		if (i == 0) {
-			minVal = dist;
-			maxVal = dist;
-			_startPoint.set(ps.x, ps.y);
-			_endPoint.set(ps.x, ps.y);
+			minVal = proj;
+			maxVal = proj;
 			continue;
 		}
-		if (dist < minVal) {
-			minVal = dist;
-			_startPoint.set(ps.x, ps.y);
+		if (proj < minVal) {
+			minVal = proj;
 		}
-		if (dist > maxVal) {
-			maxVal = dist;
-			_endPoint.set(ps.x, ps.y);
+		if (proj > maxVal) {
+			maxVal = proj;
 		}
+	}
+
+	_startPoint.set(mean_x + minVal * dirX, mean_y + minVal * dirY);
+	_endPoint.set(mean_x + maxVal * dirX, mean_y + maxVal * dirY);
+
+	if (_startPoint.distanceTo(_endPoint) <= GeContext::gTol.equalPoint()) {
+		return false;
 	}
 
 	return true;
@@ -207,7 +209,7 @@ bool GeMath::lineFitting(const GePoint2dArray& pts, GePoint2d& _startPoint, GePo
 	for (int i = 0; i < pts.length(); i++) {
 		GePoint2d ps = GeMath::vertical(pts.at(i), _startPoint, _endPoint);
 		double dist = pts.at(i).distanceTo(ps);
-		if (dist > tol) {
+		if (dist > std::fabs(tol)) {
 			return false;
 		}
 	}
@@ -220,17 +222,27 @@ bool GeMath::circleFitting(const GePoint2dArray& pts, GePoint2d& _center, double
 		return false;
 	}
 
-	// 得到三个点
+	// 选取三个尽量分散且不共线的点
 	GePoint2d p1, p2, p3;
-	if (pts.length() <= 5) {
-		p1 = pts.at(0);
-		p2 = pts.at(int(pts.length() / 2.0));
-		p3 = pts.at(pts.length() - 1);
+	bool hasValidSample = false;
+	for (int i = 0; i < n - 2 && hasValidSample == false; ++i) {
+		for (int j = i + 1; j < n - 1 && hasValidSample == false; ++j) {
+			for (int k = j + 1; k < n; ++k) {
+				double crossVal = (pts.at(j).x - pts.at(i).x) * (pts.at(k).y - pts.at(i).y) -
+					(pts.at(j).y - pts.at(i).y) * (pts.at(k).x - pts.at(i).x);
+				if (std::fabs(crossVal) > GeContext::gTol.equalPoint()) {
+					p1 = pts.at(i);
+					p2 = pts.at(j);
+					p3 = pts.at(k);
+					hasValidSample = true;
+					break;
+				}
+			}
+		}
 	}
-	else {
-		p1 = pts.at(int(pts.length() / 5.0) * 1);
-		p2 = pts.at(int(pts.length() / 2.0));
-		p3 = pts.at(int(pts.length() / 5.0) * 4);
+
+	if (hasValidSample == false) {
+		return false;
 	}
 
 	// 拟合得到圆心和半径
@@ -238,6 +250,19 @@ bool GeMath::circleFitting(const GePoint2dArray& pts, GePoint2d& _center, double
 	circArc.set(p1, p2, p3);
 	_center.set(circArc.center().x, circArc.center().y);
 	_radius = circArc.radius();
+	if (std::fabs(_radius) <= GeContext::gTol.equalPoint()) {
+		return false;
+	}
+
+	double tolAbs = std::fabs(tol);
+	if (tolAbs > 0.0) {
+		for (int i = 0; i < pts.length(); i++) {
+			double dist = pts.at(i).distanceTo(_center);
+			if (std::fabs(dist - _radius) > tolAbs) {
+				return false;
+			}
+		}
+	}
 
 	// 判断是否在精度范围内
 	//double minDist = radius - tol;

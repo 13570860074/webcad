@@ -4,6 +4,7 @@
 #include "GePlane.h"
 #include "GeLinearEnt3d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 static double planar_signed_distance(const GePoint3d& pointOnPlane, const GeVector3d& unitNormal, const GePoint3d& point)
@@ -32,7 +33,7 @@ bool GePlanarEnt::isOnPlane(const GePoint3d& point) const {
 	return this->isOnPlane(point, GeContext::gTol);
 }
 bool GePlanarEnt::isOnPlane(const GePoint3d& point, const GeTol& tol) const {
-	return fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), point)) <= tol.equalPoint();
+	return std::fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), point)) <= tol.equalPoint();
 }
 GePoint2d GePlanarEnt::paramOf(const GePoint3d& pnt) const {
 	return this->paramOf(pnt, GeContext::gTol);
@@ -42,7 +43,12 @@ GePoint2d GePlanarEnt::paramOf(const GePoint3d& pnt, const GeTol& tol) const {
 	GeVector3d vCrossProdNormal = GE_IMP_PLANARENT(this->m_pImpl)->yAxis.crossProduct(GE_IMP_PLANARENT(this->m_pImpl)->normal);
 	GeVector3d normalCrossProdU = GE_IMP_PLANARENT(this->m_pImpl)->normal.crossProduct(GE_IMP_PLANARENT(this->m_pImpl)->xAxis);
 	double tripleProduct = vCrossProdNormal.dotProduct(GE_IMP_PLANARENT(this->m_pImpl)->xAxis);
-	if (fabs(tripleProduct) <= 1.0e-300)
+	double tripleTol = tol.equalVector() * tol.equalVector() * tol.equalVector();
+	if (tripleTol < 1.0e-300)
+	{
+		tripleTol = 1.0e-300;
+	}
+	if (std::fabs(tripleProduct) <= tripleTol)
 	{
 		return GePoint2d();
 	}
@@ -129,8 +135,8 @@ GePoint3d GePlanarEnt::closestPointToLinearEnt(const GeLinearEnt3d& line, GePoin
 	double upperParam = interval.upperBound();
 	GePoint3d lowerPoint = line.evalPoint(lowerParam);
 	GePoint3d upperPoint = line.evalPoint(upperParam);
-	double lowerDist = fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), lowerPoint));
-	double upperDist = fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), upperPoint));
+	double lowerDist = std::fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), lowerPoint));
+	double upperDist = std::fabs(planar_signed_distance(this->pointOnPlane(), this->normal(), upperPoint));
 	pointOnLine = (lowerDist < upperDist) ? lowerPoint : upperPoint;
 	return planar_ortho_project(this->pointOnPlane(), this->normal(), pointOnLine);
 }
@@ -148,10 +154,10 @@ GePoint3d GePlanarEnt::closestPointToPlanarEnt(const GePlanarEnt& otherPln, GePo
 	double n01 = normal0.dotProduct(normal1);
 	double n11 = normal1.lengthSqrd();
 	double det = n00 * n11 - n01 * n01;
-	if (fabs(det) <= tol.equalPoint())
+	if (std::fabs(det) <= tol.equalPoint())
 	{
-		double envelope1 = fabs(planar_signed_distance(this->pointOnPlane(), normal0, otherPln.pointOnPlane()));
-		double envelope2 = fabs(planar_signed_distance(otherPln.pointOnPlane(), normal1, this->pointOnPlane()));
+		double envelope1 = std::fabs(planar_signed_distance(this->pointOnPlane(), normal0, otherPln.pointOnPlane()));
+		double envelope2 = std::fabs(planar_signed_distance(otherPln.pointOnPlane(), normal1, this->pointOnPlane()));
 		if (envelope1 >= envelope2)
 		{
 			pointOnOtherPln = otherPln.pointOnPlane();
@@ -235,7 +241,7 @@ bool GePlanarEnt::project(const GePoint3d& p, const GeVector3d& unitDir, GePoint
 }
 bool GePlanarEnt::project(const GePoint3d& p, const GeVector3d& unitDir, GePoint3d& projP, const GeTol& tol) const {
 	double denom = unitDir.dotProduct(this->normal());
-	if (fabs(denom) < tol.equalVector()) {
+	if (std::fabs(denom) < tol.equalVector()) {
 		return false;
 	}
 	double factor = this->normal().dotProduct(this->pointOnPlane() - p) / denom;

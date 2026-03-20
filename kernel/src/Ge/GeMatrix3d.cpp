@@ -2,6 +2,7 @@
 #include "GeScale3d.h"
 #include "GeLine3d.h"
 #include "GePlane.h"
+#include <cmath>
 
 const GeMatrix3d GeMatrix3d::kIdentity = GeMatrix3d();
 
@@ -104,52 +105,11 @@ GeMatrix3d &GeMatrix3d::setToProduct(const GeMatrix3d &matrix1, const GeMatrix3d
 }
 GeMatrix3d &GeMatrix3d::invert()
 {
-    double aNewMat[3][3];
-
-    // calcul de  la transposee de la commatrice
-    aNewMat[0][0] = this->entry[1][1] * this->entry[2][2] - this->entry[1][2] * this->entry[2][1];
-    aNewMat[1][0] = -(this->entry[1][0] * this->entry[2][2] - this->entry[2][0] * this->entry[1][2]);
-    aNewMat[2][0] = this->entry[1][0] * this->entry[2][1] - this->entry[2][0] * this->entry[1][1];
-    aNewMat[0][1] = -(this->entry[0][1] * this->entry[2][2] - this->entry[2][1] * this->entry[0][2]);
-    aNewMat[1][1] = this->entry[0][0] * this->entry[2][2] - this->entry[2][0] * this->entry[0][2];
-    aNewMat[2][1] = -(this->entry[0][0] * this->entry[2][1] - this->entry[2][0] * this->entry[0][1]);
-    aNewMat[0][2] = this->entry[0][1] * this->entry[1][2] - this->entry[1][1] * this->entry[0][2];
-    aNewMat[1][2] = -(this->entry[0][0] * this->entry[1][2] - this->entry[1][0] * this->entry[0][2]);
-    aNewMat[2][2] = this->entry[0][0] * this->entry[1][1] - this->entry[0][1] * this->entry[1][0];
-    double aDet = this->entry[0][0] * aNewMat[0][0] + this->entry[0][1] * aNewMat[1][0] + this->entry[0][2] * aNewMat[2][0];
-    double aVal = aDet;
-    if (aVal < 0)
+    GeMatrix3d invMat;
+    if (this->inverse(invMat, GeContext::gTol.equalPoint()))
     {
-        aVal = -aVal;
+        this->set(invMat);
     }
-
-    aDet = 1.0e0 / aDet;
-    this->setToIdentity();
-    this->entry[0][0] = aNewMat[0][0];
-    this->entry[1][0] = aNewMat[1][0];
-    this->entry[2][0] = aNewMat[2][0];
-    this->entry[0][1] = aNewMat[0][1];
-    this->entry[1][1] = aNewMat[1][1];
-    this->entry[2][1] = aNewMat[2][1];
-    this->entry[0][2] = aNewMat[0][2];
-    this->entry[1][2] = aNewMat[1][2];
-    this->entry[2][2] = aNewMat[2][2];
-    this->entry[0][0] *= aDet;
-    this->entry[0][1] *= aDet;
-    this->entry[0][2] *= aDet;
-    this->entry[1][0] *= aDet;
-    this->entry[1][1] *= aDet;
-    this->entry[1][2] *= aDet;
-    this->entry[2][0] *= aDet;
-    this->entry[2][1] *= aDet;
-    this->entry[2][2] *= aDet;
-
-    double x = this->entry[0][0] * this->entry[0][3] + this->entry[0][1] * this->entry[1][3] + this->entry[0][2] * this->entry[2][3];
-    double y = this->entry[1][0] * this->entry[0][3] + this->entry[1][1] * this->entry[1][3] + this->entry[1][2] * this->entry[2][3];
-    double z = this->entry[2][0] * this->entry[0][3] + this->entry[2][1] * this->entry[1][3] + this->entry[2][2] * this->entry[2][3];
-    this->entry[0][3] = 0 - x;
-    this->entry[1][3] = 0 - y;
-    this->entry[2][3] = 0 - z;
     return *this;
 }
 GeMatrix3d GeMatrix3d::inverse() const
@@ -164,9 +124,10 @@ GeMatrix3d GeMatrix3d::inverse(const GeTol &tol) const
 }
 bool GeMatrix3d::inverse(GeMatrix3d &inverseMatrix, double tol) const
 {
-    bool isError = true;
-
     double aNewMat[3][3];
+    double tx = this->entry[0][3];
+    double ty = this->entry[1][3];
+    double tz = this->entry[2][3];
 
     // calcul de  la transposee de la commatrice
     aNewMat[0][0] = this->entry[1][1] * this->entry[2][2] - this->entry[1][2] * this->entry[2][1];
@@ -179,14 +140,12 @@ bool GeMatrix3d::inverse(GeMatrix3d &inverseMatrix, double tol) const
     aNewMat[1][2] = -(this->entry[0][0] * this->entry[1][2] - this->entry[1][0] * this->entry[0][2]);
     aNewMat[2][2] = this->entry[0][0] * this->entry[1][1] - this->entry[0][1] * this->entry[1][0];
     double aDet = this->entry[0][0] * aNewMat[0][0] + this->entry[0][1] * aNewMat[1][0] + this->entry[0][2] * aNewMat[2][0];
-    double aVal = aDet;
-    if (aVal < 0)
+    double aVal = std::fabs(aDet);
+    double tolAbs = std::fabs(tol);
+    if (aVal <= tolAbs)
     {
-        aVal = -aVal;
-    }
-    if (aVal <= 2.2250738585072014e-308 - tol)
-    {
-        isError = false;
+        inverseMatrix.setToIdentity();
+        return false;
     }
 
     aDet = 1.0e0 / aDet;
@@ -210,13 +169,13 @@ bool GeMatrix3d::inverse(GeMatrix3d &inverseMatrix, double tol) const
     inverseMatrix.entry[2][1] *= aDet;
     inverseMatrix.entry[2][2] *= aDet;
 
-    double x = this->entry[0][0] * this->entry[0][3] + this->entry[0][1] * this->entry[1][3] + this->entry[0][2] * this->entry[2][3];
-    double y = this->entry[1][0] * this->entry[0][3] + this->entry[1][1] * this->entry[1][3] + this->entry[1][2] * this->entry[2][3];
-    double z = this->entry[2][0] * this->entry[0][3] + this->entry[2][1] * this->entry[1][3] + this->entry[2][2] * this->entry[2][3];
+    double x = inverseMatrix.entry[0][0] * tx + inverseMatrix.entry[0][1] * ty + inverseMatrix.entry[0][2] * tz;
+    double y = inverseMatrix.entry[1][0] * tx + inverseMatrix.entry[1][1] * ty + inverseMatrix.entry[1][2] * tz;
+    double z = inverseMatrix.entry[2][0] * tx + inverseMatrix.entry[2][1] * ty + inverseMatrix.entry[2][2] * tz;
     inverseMatrix.entry[0][3] = 0 - x;
     inverseMatrix.entry[1][3] = 0 - y;
     inverseMatrix.entry[2][3] = 0 - z;
-    return isError;
+    return true;
 }
 bool GeMatrix3d::isSingular() const
 {
@@ -224,7 +183,7 @@ bool GeMatrix3d::isSingular() const
 }
 bool GeMatrix3d::isSingular(const GeTol &tol) const
 {
-    return abs(this->det()) <= tol.equalPoint();
+    return std::fabs(this->det()) <= tol.equalPoint();
 }
 GeMatrix3d &GeMatrix3d::transposeIt()
 {
@@ -257,9 +216,9 @@ bool GeMatrix3d::isPerspective() const
 }
 bool GeMatrix3d::isPerspective(const GeTol &tol) const
 {
-    return abs(this->entry[3][0]) > tol.equalVector() ||
-        abs(this->entry[3][1]) > tol.equalVector() ||
-        abs(this->entry[3][2]) > tol.equalVector();
+    return std::fabs(this->entry[3][0]) > tol.equalVector() ||
+        std::fabs(this->entry[3][1]) > tol.equalVector() ||
+        std::fabs(this->entry[3][2]) > tol.equalVector();
 }
 bool GeMatrix3d::operator==(const GeMatrix3d &matrix) const
 {
@@ -280,7 +239,7 @@ bool GeMatrix3d::isEqualTo(const GeMatrix3d &matrix, const GeTol &tol) const
     {
         for (int u = 0; u < 4; u++)
         {
-            if (abs(this->entry[i][u] - matrix.entry[i][u]) > tol.equalVector())
+            if (std::fabs(this->entry[i][u] - matrix.entry[i][u]) > tol.equalVector())
             {
                 IsEqual = false;
                 break;

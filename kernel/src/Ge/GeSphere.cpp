@@ -6,6 +6,7 @@
 #include "GePlane.h"
 #include "GePointOnSurface.h"
 #include "GeImpl.h"
+#include <cmath>
 
 static double sphere_normalize_angle(double angle)
 {
@@ -55,7 +56,7 @@ static bool sphere_is_uni_scaled_ortho(const GeMatrix3d& xfm, double& scaleFacto
         return false;
     }
 
-    if (abs(lengthX - lengthY) > tol.equalVector() || abs(lengthX - lengthZ) > tol.equalVector())
+    if (std::fabs(lengthX - lengthY) > tol.equalVector() || std::fabs(lengthX - lengthZ) > tol.equalVector())
     {
         return false;
     }
@@ -63,9 +64,9 @@ static bool sphere_is_uni_scaled_ortho(const GeMatrix3d& xfm, double& scaleFacto
     GeVector3d unitX = axisX.normal();
     GeVector3d unitY = axisY.normal();
     GeVector3d unitZ = axisZ.normal();
-    if (abs(unitX.dotProduct(unitY)) > tol.equalVector()
-        || abs(unitX.dotProduct(unitZ)) > tol.equalVector()
-        || abs(unitY.dotProduct(unitZ)) > tol.equalVector())
+    if (std::fabs(unitX.dotProduct(unitY)) > tol.equalVector()
+        || std::fabs(unitX.dotProduct(unitZ)) > tol.equalVector()
+        || std::fabs(unitY.dotProduct(unitZ)) > tol.equalVector())
     {
         return false;
     }
@@ -91,7 +92,7 @@ static void sphere_get_basis(const GeSphere& sphere, GeVector3d& axisU, GeVector
     axisV = axisW.crossProduct(axisU);
     if (axisV.isZeroLength())
     {
-        GeVector3d fallback = abs(axisW.x) < 0.9 ? GeVector3d::kXAxis : GeVector3d::kZAxis;
+        GeVector3d fallback = std::fabs(axisW.x) < 0.9 ? GeVector3d::kXAxis : GeVector3d::kZAxis;
         axisU = fallback;
         axisV = axisW.crossProduct(axisU);
     }
@@ -124,7 +125,7 @@ static GePoint2d sphere_param_from_vector(const GeSphere& sphere, const GeVector
 
 static bool sphere_u_in_range(double angle, double start, double end, const GeTol& tol)
 {
-    double sweep = abs(end - start);
+    double sweep = std::fabs(end - start);
     if (sweep >= PI - tol.equalPoint())
     {
         return true;
@@ -136,7 +137,7 @@ static bool sphere_u_in_range(double angle, double start, double end, const GeTo
 
 static bool sphere_v_in_range(double angle, double start, double end, const GeTol& tol)
 {
-    double sweep = abs(end - start);
+    double sweep = std::fabs(end - start);
     if (sweep >= PI * 2.0 - tol.equalPoint())
     {
         return true;
@@ -182,8 +183,8 @@ static GePoint2d sphere_clamp_param(const GeSphere& sphere, const GePoint2d& par
         {
             angle -= PI * 2.0;
         }
-        double distToStart = abs(angle - begin);
-        double distToEnd = abs(angle - finish);
+        double distToStart = std::fabs(angle - begin);
+        double distToEnd = std::fabs(angle - finish);
         v = distToStart <= distToEnd ? begin : finish;
     }
 
@@ -379,7 +380,7 @@ GeSphere& GeSphere::scaleBy(double scaleFactor, const GePoint3d& wrtPoint)
 
 double GeSphere::radius() const
 {
-    return abs(GE_IMP_SPHERE(this->m_pImpl)->radius);
+    return std::fabs(GE_IMP_SPHERE(this->m_pImpl)->radius);
 }
 GePoint3d GeSphere::center() const
 {
@@ -421,7 +422,7 @@ Adesk::Boolean GeSphere::isOuterNormal() const
 }
 Adesk::Boolean GeSphere::isClosed(const GeTol &tol) const
 {
-    double vSweep = abs(GE_IMP_SPHERE(this->m_pImpl)->endAngleV - GE_IMP_SPHERE(this->m_pImpl)->startAngleV);
+    double vSweep = std::fabs(GE_IMP_SPHERE(this->m_pImpl)->endAngleV - GE_IMP_SPHERE(this->m_pImpl)->startAngleV);
     if (vSweep >= PI * 2.0 - tol.equalPoint())
     {
         return true;
@@ -535,7 +536,7 @@ Adesk::Boolean GeSphere::intersectWith(const GeLinearEnt3d &line, int &intn,
         return Adesk::kFalse;
     }
 
-    if (abs(discriminant) <= tol.equalPoint())
+    if (std::fabs(discriminant) <= tol.equalPoint())
     {
         double t = -b / 2.0;
         GePoint3d hit = origin + dir * t;
@@ -626,7 +627,7 @@ bool GeSphere::isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const
 
 bool GeSphere::isOn(const GePoint3d& pnt, GePoint2d& paramPoint, const GeTol& tol) const
 {
-    if (abs(this->center().distanceTo(pnt) - this->radius()) > tol.equalPoint())
+    if (std::fabs(this->center().distanceTo(pnt) - this->radius()) > tol.equalPoint())
     {
         return false;
     }

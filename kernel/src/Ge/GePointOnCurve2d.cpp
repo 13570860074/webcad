@@ -6,6 +6,7 @@
 #include "GeCircArc2d.h"
 #include "GeEllipArc2d.h"
 #include "GeImpl.h"
+#include <cmath>
 
 
 GePointOnCurve2d::GePointOnCurve2d() {
@@ -84,21 +85,20 @@ GePoint2d GePointOnCurve2d::point(const GeCurve2d& crv, double param) const {
 		}
 	}
 	else if (crv.type() == Ge::EntityId::kEllipArc2d) {
-
-
 		GeEllipArc2d ellipArc = (GeEllipArc2d&)crv;
-		point = ellipArc.center();
-		point += ellipArc.majorAxis();
-		if (ellipArc.isClockWise() == false) {
-			point.rotateBy(param, ellipArc.center());
-		}
-		else {
-			point.rotateBy(0 - param, ellipArc.center());
+		GeVector2d majorAxis = ellipArc.majorAxis();
+		GeVector2d minorAxis = ellipArc.minorAxis();
+		double majorRadius = majorAxis.length();
+		double minorRadius = minorAxis.length();
+		if (majorRadius < GeContext::gTol.equalPoint() || minorRadius < GeContext::gTol.equalPoint()) {
+			return ellipArc.center();
 		}
 
-		GeMatrix2d mat;
-		mat.setToScaling(GeScale2d(1, ellipArc.minorRadius() / ellipArc.majorRadius()));
-		point.transformBy(mat);
+		GeVector2d majorDir = majorAxis.normal();
+		GeVector2d minorDir = minorAxis.normal();
+		point = ellipArc.center()
+			+ majorDir * (majorRadius * std::cos(param))
+			+ minorDir * (minorRadius * std::sin(param));
 	}
 
 	return point;
@@ -136,7 +136,7 @@ bool GePointOnCurve2d::isEqualTo(const GePointOnCurve2d& entity) const {
 	return this->isEqualTo(entity, GeContext::gTol);
 }
 bool GePointOnCurve2d::isEqualTo(const GePointOnCurve2d& entity, const GeTol& tol) const {
-	if (abs(this->parameter() - entity.parameter()) > tol.equalPoint()) {
+	if (std::fabs(this->parameter() - entity.parameter()) > tol.equalPoint()) {
 		return false;
 	}
 	if (this->curve() != entity.curve()) {
