@@ -133,6 +133,8 @@
 #include "GeCircArc2d.h"
 #include "GeCircArc3d.h"
 #include "GeClipBoundary2d.h"
+#include "GeCone.h"
+#include "GeCylinder.h"
 #include "GeCompositeCurve2d.h"
 #include "GeCompositeCurve3d.h"
 #include "GeCurve2d.h"
