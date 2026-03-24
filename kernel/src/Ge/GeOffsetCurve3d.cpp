@@ -4,6 +4,7 @@
 #include "GePlane.h"
 #include "GeScale3d.h"
 #include <cmath>
+#include <limits>
 
 namespace {
 double offset3d_param_step(const GeInterval& range)
@@ -19,14 +20,79 @@ double offset3d_param_step(const GeInterval& range)
     }
     return 1.0e-5;
 }
+
+GePoint3d offset3d_invalid_point()
+{
+    double nanValue = std::numeric_limits<double>::quiet_NaN();
+    return GePoint3d(nanValue, nanValue, nanValue);
+}
+
+bool offset3d_is_degenerate_curve(const GeCurve3d* curve, const GeTol& tol)
+{
+    if (curve == NULL) {
+        return true;
+    }
+
+    if (curve->length() > tol.equalPoint()) {
+        return false;
+    }
+
+    GeInterval range;
+    curve->getInterval(range);
+    if (range.isBounded()) {
+        return std::fabs(range.upperBound() - range.lowerBound()) <= tol.equalPoint();
+    }
+
+    return true;
+}
+
+GeVector3d offset3d_matrix_column(const GeMatrix3d& matrix, int column)
+{
+    return GeVector3d(matrix(0, column), matrix(1, column), matrix(2, column));
+}
+
+bool offset3d_is_uni_scaled_ortho(const GeMatrix3d& matrix, double& scaleFactor, const GeTol& tol)
+{
+    GeVector3d xAxis = offset3d_matrix_column(matrix, 0);
+    GeVector3d yAxis = offset3d_matrix_column(matrix, 1);
+    GeVector3d zAxis = offset3d_matrix_column(matrix, 2);
+
+    double xLength = xAxis.length();
+    double yLength = yAxis.length();
+    double zLength = zAxis.length();
+    double scaleTol = tol.equalVector();
+
+    if (xLength <= scaleTol || yLength <= scaleTol || zLength <= scaleTol) {
+        return false;
+    }
+
+    if (std::fabs(xLength - yLength) > scaleTol || std::fabs(xLength - zLength) > scaleTol) {
+        return false;
+    }
+
+    if (std::fabs(xAxis.dotProduct(yAxis)) > scaleTol * xLength * yLength) {
+        return false;
+    }
+    if (std::fabs(xAxis.dotProduct(zAxis)) > scaleTol * xLength * zLength) {
+        return false;
+    }
+    if (std::fabs(yAxis.dotProduct(zAxis)) > scaleTol * yLength * zLength) {
+        return false;
+    }
+
+    scaleFactor = xLength;
+    return true;
+}
 }
 
 GeOffsetCurve3d::GeOffsetCurve3d()
     : m_pCurve(NULL)
     , m_isOwner(false)
-    , m_paramDir(true)
+    , m_paramDir(false)
     , m_offsetDist(0.0)
-    , m_planeNormal(GeVector3d::kZAxis)
+    , m_planeNormal(GeVector3d::kIdentity)
+    , m_interval()
+    , m_hasCustomInterval(false)
 {
     m_transform.setToIdentity();
 }
@@ -34,12 +100,28 @@ GeOffsetCurve3d::GeOffsetCurve3d()
 GeOffsetCurve3d::GeOffsetCurve3d(const GeCurve3d& baseCurve, const GeVector3d& planeNormal, double offsetDistance, bool makeCopy)
     : m_pCurve(NULL)
     , m_isOwner(false)
-    , m_paramDir(true)
-    , m_offsetDist(offsetDistance)
-    , m_planeNormal(planeNormal)
+    , m_paramDir(false)
+    , m_offsetDist(0.0)
+    , m_planeNormal(GeVector3d::kIdentity)
+    , m_interval()
+    , m_hasCustomInterval(false)
 {
     m_transform.setToIdentity();
     this->setCurve(baseCurve, makeCopy);
+    if (m_pCurve != NULL) {
+        m_pCurve->getInterval(m_interval);
+    }
+    else {
+        m_interval.set();
+    }
+    m_hasCustomInterval = false;
+
+    GeVector3d normalizedNormal = planeNormal;
+    if (planeNormal.length() > GeContext::gTol.equalVector()) {
+        normalizedNormal = planeNormal.normal();
+    }
+    this->setNormal(normalizedNormal);
+    this->setOffsetDistance(offsetDistance);
 }
 
 GeOffsetCurve3d::GeOffsetCurve3d(const GeOffsetCurve3d& source)
@@ -49,9 +131,13 @@ GeOffsetCurve3d::GeOffsetCurve3d(const GeOffsetCurve3d& source)
     , m_offsetDist(source.m_offsetDist)
     , m_planeNormal(source.m_planeNormal)
     , m_transform(source.m_transform)
+    , m_interval(source.m_interval)
+    , m_hasCustomInterval(source.m_hasCustomInterval)
 {
     if (source.m_pCurve != NULL) {
         this->setCurve(*source.m_pCurve, true);
+        m_interval = source.m_interval;
+        m_hasCustomInterval = source.m_hasCustomInterval;
     }
 }
 
@@ -71,6 +157,13 @@ void GeOffsetCurve3d::clearOwnedCurve()
 
 GeCurve3d* GeOffsetCurve3d::mutableCurve()
 {
+    if (m_pCurve != NULL && m_isOwner == false) {
+        GeCurve3d* copiedCurve = dynamic_cast<GeCurve3d*>(m_pCurve->copy());
+        if (copiedCurve != NULL) {
+            m_pCurve = copiedCurve;
+            m_isOwner = true;
+        }
+    }
     return m_pCurve;
 }
 
@@ -81,12 +174,7 @@ const GeCurve3d* GeOffsetCurve3d::curve() const
 
 GeVector3d GeOffsetCurve3d::normal() const
 {
-    GeVector3d n = m_planeNormal;
-    n.transformBy(m_transform);
-    if (n.length() > GeContext::gTol.equalPoint()) {
-        n.normalize();
-    }
-    return n;
+    return m_planeNormal;
 }
 
 double GeOffsetCurve3d::offsetDistance() const
@@ -146,21 +234,28 @@ GeOffsetCurve3d& GeOffsetCurve3d::operator = (const GeOffsetCurve3d& offsetCurve
     m_offsetDist = offsetCurve.m_offsetDist;
     m_planeNormal = offsetCurve.m_planeNormal;
     m_transform = offsetCurve.m_transform;
+    m_interval = offsetCurve.m_interval;
+    m_hasCustomInterval = offsetCurve.m_hasCustomInterval;
 
     if (offsetCurve.m_pCurve != NULL) {
         this->setCurve(*offsetCurve.m_pCurve, true);
+        m_interval = offsetCurve.m_interval;
+        m_hasCustomInterval = offsetCurve.m_hasCustomInterval;
     }
 
     return *this;
 }
 
+bool GeOffsetCurve3d::setInterval(const GeInterval& range)
+{
+    m_interval = range;
+    m_hasCustomInterval = true;
+    return m_pCurve != NULL;
+}
+
 void GeOffsetCurve3d::getInterval(GeInterval& range) const
 {
-    if (m_pCurve == NULL) {
-        range.set();
-        return;
-    }
-    m_pCurve->getInterval(range);
+    range = m_interval;
 }
 
 void GeOffsetCurve3d::getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const
@@ -179,15 +274,37 @@ void GeOffsetCurve3d::getInterval(GeInterval& range, GePoint3d& startPoint, GePo
 GeCurve3d& GeOffsetCurve3d::reverseParam()
 {
     m_paramDir = !m_paramDir;
-    m_offsetDist = 0.0 - m_offsetDist;
+    GeCurve3d* baseCurve = this->mutableCurve();
+    if (baseCurve != NULL) {
+        baseCurve->reverseParam();
+    }
     return *this;
 }
 
 GeOffsetCurve3d& GeOffsetCurve3d::transformBy(const GeMatrix3d& xfm)
 {
-    GeMatrix3d product;
-    product.setToProduct(xfm, m_transform);
-    m_transform = product;
+    if (xfm.isEqualTo(GeMatrix3d::kIdentity)) {
+        return *this;
+    }
+
+    double scaleFactor = 0.0;
+    if (xfm.isPerspective() || offset3d_is_uni_scaled_ortho(xfm, scaleFactor, GeContext::gTol) == false) {
+        return *this;
+    }
+
+    m_transform *= xfm;
+
+    GeCurve3d* baseCurve = this->mutableCurve();
+    if (baseCurve != NULL) {
+        baseCurve->transformBy(xfm);
+    }
+
+    m_offsetDist *= scaleFactor;
+    m_planeNormal.transformBy(xfm);
+    if (m_planeNormal.length() > GeContext::gTol.equalVector()) {
+        m_planeNormal.normalize();
+    }
+
     return *this;
 }
 
@@ -271,7 +388,15 @@ bool GeOffsetCurve3d::isEqualTo(const GeOffsetCurve3d& entity, const GeTol& tol)
         return false;
     }
 
-    if (this->normal().isEqualTo(entity.normal(), tol) == false) {
+    if (m_planeNormal.isEqualTo(entity.m_planeNormal, tol) == false) {
+        return false;
+    }
+
+    if ((m_interval == entity.m_interval) == false) {
+        return false;
+    }
+
+    if (m_transform.isEqualTo(entity.m_transform, tol) == false) {
         return false;
     }
 
@@ -322,14 +447,8 @@ GePoint3d GeOffsetCurve3d::closestPointTo(const GePoint3d& pnt) const
 GePoint3d GeOffsetCurve3d::closestPointTo(const GePoint3d& pnt, const GeTol& tol) const
 {
     if (m_pCurve == NULL) {
-        GePoint3d zero = GePoint3d::kOrigin;
-        zero.transformBy(m_transform);
-        return zero;
+        return GePoint3d::kOrigin;
     }
-
-    GeMatrix3d inv = m_transform.inverse();
-    GePoint3d local = pnt;
-    local.transformBy(inv);
 
     GeInterval range;
     this->getInterval(range);
@@ -340,6 +459,7 @@ GePoint3d GeOffsetCurve3d::closestPointTo(const GePoint3d& pnt, const GeTol& tol
 
     if (range.isBounded() == true) {
         int sampleCount = 129;
+        int bestIndex = 0;
         for (int i = 0; i < sampleCount; i++) {
             double ratio = 0.0;
             if (sampleCount > 1) {
@@ -347,29 +467,73 @@ GePoint3d GeOffsetCurve3d::closestPointTo(const GePoint3d& pnt, const GeTol& tol
             }
             double param = range.lowerBound() + (range.upperBound() - range.lowerBound()) * ratio;
             GePoint3d p = this->evalLocalPoint(param, tol);
-            double dist = p.distanceTo(local);
+            double dist = p.distanceTo(pnt);
             if (hasBest == false || dist < bestDist) {
                 hasBest = true;
                 bestDist = dist;
                 bestParam = param;
+                bestIndex = i;
+            }
+        }
+
+        if (hasBest == true && sampleCount > 2) {
+            double span = range.upperBound() - range.lowerBound();
+            double sampleStep = span / double(sampleCount - 1);
+            double left = bestParam;
+            double right = bestParam;
+            if (bestIndex > 0) {
+                left = bestParam - sampleStep;
+            }
+            if (bestIndex + 1 < sampleCount) {
+                right = bestParam + sampleStep;
+            }
+
+            if (right < left) {
+                double tmp = left;
+                left = right;
+                right = tmp;
+            }
+            if (left < range.lowerBound()) {
+                left = range.lowerBound();
+            }
+            if (right > range.upperBound()) {
+                right = range.upperBound();
+            }
+
+            if (right > left) {
+                for (int iter = 0; iter < 24; ++iter) {
+                    double p1 = left + (right - left) / 3.0;
+                    double p2 = right - (right - left) / 3.0;
+                    double d1 = this->evalLocalPoint(p1, tol).distanceTo(pnt);
+                    double d2 = this->evalLocalPoint(p2, tol).distanceTo(pnt);
+                    if (d1 <= d2) {
+                        right = p2;
+                    }
+                    else {
+                        left = p1;
+                    }
+                }
+
+                double refinedParam = (left + right) * 0.5;
+                double refinedDist = this->evalLocalPoint(refinedParam, tol).distanceTo(pnt);
+                if (refinedDist < bestDist) {
+                    bestDist = refinedDist;
+                    bestParam = refinedParam;
+                }
             }
         }
     }
     else {
-        GePoint3d baseClosest = m_pCurve->closestPointTo(local, tol);
+        GePoint3d baseClosest = m_pCurve->closestPointTo(pnt, tol);
         bestParam = m_pCurve->paramOf(baseClosest, tol);
         hasBest = true;
     }
 
     if (hasBest == false) {
-        GePoint3d zero = GePoint3d::kOrigin;
-        zero.transformBy(m_transform);
-        return zero;
+        return GePoint3d::kOrigin;
     }
 
-    GePoint3d result = this->evalLocalPoint(bestParam, tol);
-    result.transformBy(m_transform);
-    return result;
+    return this->evalLocalPoint(bestParam, tol);
 }
 
 GePoint3d GeOffsetCurve3d::closestPointTo(const GeCurve3d& curve3d, GePoint3d& pntOnOtherCrv) const
@@ -389,32 +553,79 @@ double GeOffsetCurve3d::paramOf(const GePoint3d& pnt) const
 
 double GeOffsetCurve3d::paramOf(const GePoint3d& pnt, const GeTol& tol) const
 {
+    if (m_pCurve == NULL) {
+        return 0.0;
+    }
+
     GeInterval range;
     this->getInterval(range);
     if (range.isBounded() == false) {
-        GePoint3d on = this->closestPointTo(pnt, tol);
-        GeMatrix3d inv = m_transform.inverse();
-        on.transformBy(inv);
-        return m_pCurve != NULL ? m_pCurve->paramOf(on, tol) : 0.0;
+        GePoint3d baseClosest = m_pCurve->closestPointTo(pnt, tol);
+        return m_pCurve->paramOf(baseClosest, tol);
     }
 
-    GeMatrix3d inv = m_transform.inverse();
-    GePoint3d local = pnt;
-    local.transformBy(inv);
-
     double bestParam = range.lowerBound();
-    double bestDist = this->evalLocalPoint(bestParam, tol).distanceTo(local);
+    double bestDist = this->evalLocalPoint(bestParam, tol).distanceTo(pnt);
+    int bestIndex = 0;
 
     int sampleCount = 129;
     for (int i = 1; i < sampleCount; i++) {
         double ratio = double(i) / double(sampleCount - 1);
         double param = range.lowerBound() + (range.upperBound() - range.lowerBound()) * ratio;
-        double dist = this->evalLocalPoint(param, tol).distanceTo(local);
+        double dist = this->evalLocalPoint(param, tol).distanceTo(pnt);
         if (dist < bestDist) {
             bestDist = dist;
             bestParam = param;
+            bestIndex = i;
         }
     }
+
+    if (sampleCount > 2) {
+        double span = range.upperBound() - range.lowerBound();
+        double sampleStep = span / double(sampleCount - 1);
+        double left = bestParam;
+        double right = bestParam;
+        if (bestIndex > 0) {
+            left = bestParam - sampleStep;
+        }
+        if (bestIndex + 1 < sampleCount) {
+            right = bestParam + sampleStep;
+        }
+
+        if (right < left) {
+            double tmp = left;
+            left = right;
+            right = tmp;
+        }
+        if (left < range.lowerBound()) {
+            left = range.lowerBound();
+        }
+        if (right > range.upperBound()) {
+            right = range.upperBound();
+        }
+
+        if (right > left) {
+            for (int iter = 0; iter < 24; ++iter) {
+                double p1 = left + (right - left) / 3.0;
+                double p2 = right - (right - left) / 3.0;
+                double d1 = this->evalLocalPoint(p1, tol).distanceTo(pnt);
+                double d2 = this->evalLocalPoint(p2, tol).distanceTo(pnt);
+                if (d1 <= d2) {
+                    right = p2;
+                }
+                else {
+                    left = p1;
+                }
+            }
+
+            double refinedParam = (left + right) * 0.5;
+            double refinedDist = this->evalLocalPoint(refinedParam, tol).distanceTo(pnt);
+            if (refinedDist < bestDist) {
+                bestParam = refinedParam;
+            }
+        }
+    }
+
     return bestParam;
 }
 
@@ -480,20 +691,7 @@ bool GeOffsetCurve3d::hasEndPoint(GePoint3d& endPoint) const
 
 double GeOffsetCurve3d::mapParam(double param) const
 {
-    if (m_paramDir == true) {
-        return param;
-    }
-
-    GeInterval range;
-    if (m_pCurve != NULL) {
-        m_pCurve->getInterval(range);
-    }
-
-    if (range.isBounded() == true) {
-        return range.lowerBound() + range.upperBound() - param;
-    }
-
-    return 0.0 - param;
+    return param;
 }
 
 GeVector3d GeOffsetCurve3d::tangentAt(double param, const GeTol& tol) const
@@ -503,20 +701,46 @@ GeVector3d GeOffsetCurve3d::tangentAt(double param, const GeTol& tol) const
     }
 
     GeInterval range;
-    m_pCurve->getInterval(range);
+    this->getInterval(range);
+    if (range.isBounded() == false) {
+        m_pCurve->getInterval(range);
+    }
     double step = offset3d_param_step(range);
 
     double mapped = this->mapParam(param);
     double p0 = mapped - step;
     double p1 = mapped + step;
 
+    if (range.isBounded()) {
+        double lower = range.lowerBound();
+        double upper = range.upperBound();
+        if (p0 < lower) {
+            p0 = lower;
+        }
+        if (p1 > upper) {
+            p1 = upper;
+        }
+        if (p1 <= p0) {
+            if (mapped <= lower) {
+                p0 = lower;
+                p1 = lower + step;
+                if (p1 > upper) {
+                    p1 = upper;
+                }
+            }
+            else {
+                p1 = upper;
+                p0 = upper - step;
+                if (p0 < lower) {
+                    p0 = lower;
+                }
+            }
+        }
+    }
+
     GePoint3d a = m_pCurve->evalPoint(p0);
     GePoint3d b = m_pCurve->evalPoint(p1);
     GeVector3d tan = b - a;
-
-    if (m_paramDir == false) {
-        tan = tan * (-1.0);
-    }
 
     if (tan.length() <= tol.equalPoint()) {
         return GeVector3d::kXAxis;
@@ -530,6 +754,10 @@ GePoint3d GeOffsetCurve3d::evalLocalPoint(double param, const GeTol& tol) const
 {
     if (m_pCurve == NULL) {
         return GePoint3d::kOrigin;
+    }
+
+    if (offset3d_is_degenerate_curve(m_pCurve, tol)) {
+        return offset3d_invalid_point();
     }
 
     double mapped = this->mapParam(param);
@@ -555,7 +783,35 @@ GePoint3d GeOffsetCurve3d::evalLocalPoint(double param, const GeTol& tol) const
 
 GePoint3d GeOffsetCurve3d::evalPoint(double param) const
 {
-    GePoint3d p = this->evalLocalPoint(param, GeContext::gTol);
-    p.transformBy(m_transform);
-    return p;
+    return this->evalLocalPoint(param, GeContext::gTol);
+}
+
+void GeOffsetCurve3d::getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const
+{
+    piece1 = NULL;
+    piece2 = NULL;
+
+    if (m_pCurve == NULL) {
+        return;
+    }
+
+    GeInterval range;
+    this->getInterval(range);
+    GeInterval exactRange = range;
+    exactRange.setTolerance(0.0);
+    if (range.isBounded() == false || exactRange.contains(param) == false) {
+        return;
+    }
+
+    GeOffsetCurve3d* offsetPiece1 = new GeOffsetCurve3d(*m_pCurve, m_planeNormal, m_offsetDist, true);
+    offsetPiece1->m_paramDir = m_paramDir;
+    offsetPiece1->m_transform = m_transform;
+    offsetPiece1->setInterval(GeInterval(range.lowerBound(), param));
+    piece1 = offsetPiece1;
+
+    GeOffsetCurve3d* offsetPiece2 = new GeOffsetCurve3d(*m_pCurve, m_planeNormal, m_offsetDist, true);
+    offsetPiece2->m_paramDir = m_paramDir;
+    offsetPiece2->m_transform = m_transform;
+    offsetPiece2->setInterval(GeInterval(param, range.upperBound()));
+    piece2 = offsetPiece2;
 }

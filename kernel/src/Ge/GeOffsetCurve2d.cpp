@@ -1,10 +1,17 @@
 #include "GeOffsetCurve2d.h"
+#include "GeCircArc2d.h"
 #include "GeInterval.h"
 #include "GeLine2d.h"
 #include "GeScale2d.h"
 #include <cmath>
+#include <limits>
 
 namespace {
+double offset2d_pi()
+{
+    return std::acos(-1.0);
+}
+
 double offset2d_param_step(const GeInterval& range)
 {
     if (range.isBounded() == true) {
@@ -18,13 +25,104 @@ double offset2d_param_step(const GeInterval& range)
     }
     return 1.0e-5;
 }
+
+GePoint2d offset2d_invalid_point()
+{
+    double nanValue = std::numeric_limits<double>::quiet_NaN();
+    return GePoint2d(nanValue, nanValue);
+}
+
+bool offset2d_is_degenerate_curve(const GeCurve2d* curve, const GeTol& tol)
+{
+    if (curve == NULL) {
+        return true;
+    }
+
+    if (curve->length() > tol.equalPoint()) {
+        return false;
+    }
+
+    GeInterval range;
+    curve->getInterval(range);
+    if (range.isBounded()) {
+        return std::fabs(range.upperBound() - range.lowerBound()) <= tol.equalPoint();
+    }
+
+    return true;
+}
+
+GeVector2d offset2d_matrix_column(const GeMatrix2d& matrix, int column)
+{
+    return GeVector2d(matrix(0, column), matrix(1, column));
+}
+
+bool offset2d_is_uni_scaled_ortho(const GeMatrix2d& matrix, double& scaleFactor, const GeTol& tol)
+{
+    GeVector2d xAxis = offset2d_matrix_column(matrix, 0);
+    GeVector2d yAxis = offset2d_matrix_column(matrix, 1);
+
+    double xLength = xAxis.length();
+    double yLength = yAxis.length();
+    double scaleTol = tol.equalVector();
+
+    if (xLength <= scaleTol || yLength <= scaleTol) {
+        return false;
+    }
+
+    if (std::fabs(xLength - yLength) > scaleTol) {
+        return false;
+    }
+
+    if (std::fabs(xAxis.dotProduct(yAxis)) > scaleTol * xLength * yLength) {
+        return false;
+    }
+
+    scaleFactor = xLength;
+    if (matrix.det() < 0.0) {
+        scaleFactor = -scaleFactor;
+    }
+    return true;
+}
+
+double offset2d_move_into_valid_inter(double lower, double upper, double param)
+{
+    double period = 2.0 * offset2d_pi();
+    double center = (lower + upper) * 0.5;
+    double shift = std::floor((center - param) / period + 0.5);
+    double bestParam = param + shift * period;
+    double bestDelta = std::fabs(bestParam - center);
+
+    for (int offset = -1; offset <= 1; ++offset) {
+        double candidate = param + (shift + double(offset)) * period;
+        double delta = std::fabs(candidate - center);
+        if (delta < bestDelta) {
+            bestDelta = delta;
+            bestParam = candidate;
+        }
+    }
+
+    return bestParam;
+}
+
+double offset2d_clamp_to_interval(const GeInterval& range, double value)
+{
+    if (range.isBoundedBelow() && value < range.lowerBound()) {
+        return range.lowerBound();
+    }
+    if (range.isBoundedAbove() && value > range.upperBound()) {
+        return range.upperBound();
+    }
+    return value;
+}
 }
 
 GeOffsetCurve2d::GeOffsetCurve2d()
     : m_pCurve(NULL)
     , m_isOwner(false)
-    , m_paramDir(true)
+    , m_paramDir(false)
     , m_offsetDist(0.0)
+    , m_interval()
+    , m_hasCustomInterval(false)
 {
     m_transform.setToIdentity();
 }
@@ -32,11 +130,21 @@ GeOffsetCurve2d::GeOffsetCurve2d()
 GeOffsetCurve2d::GeOffsetCurve2d(const GeCurve2d& baseCurve, double offsetDistance, bool makeCopy)
     : m_pCurve(NULL)
     , m_isOwner(false)
-    , m_paramDir(true)
-    , m_offsetDist(offsetDistance)
+    , m_paramDir(false)
+    , m_offsetDist(0.0)
+    , m_interval()
+    , m_hasCustomInterval(false)
 {
     m_transform.setToIdentity();
     this->setCurve(baseCurve, makeCopy);
+    if (m_pCurve != NULL) {
+        m_pCurve->getInterval(m_interval);
+    }
+    else {
+        m_interval.set();
+    }
+    m_hasCustomInterval = false;
+    this->setOffsetDistance(offsetDistance);
 }
 
 GeOffsetCurve2d::GeOffsetCurve2d(const GeOffsetCurve2d& source)
@@ -45,9 +153,13 @@ GeOffsetCurve2d::GeOffsetCurve2d(const GeOffsetCurve2d& source)
     , m_paramDir(source.m_paramDir)
     , m_offsetDist(source.m_offsetDist)
     , m_transform(source.m_transform)
+    , m_interval(source.m_interval)
+    , m_hasCustomInterval(source.m_hasCustomInterval)
 {
     if (source.m_pCurve != NULL) {
         this->setCurve(*source.m_pCurve, true);
+        m_interval = source.m_interval;
+        m_hasCustomInterval = source.m_hasCustomInterval;
     }
 }
 
@@ -67,6 +179,13 @@ void GeOffsetCurve2d::clearOwnedCurve()
 
 GeCurve2d* GeOffsetCurve2d::mutableCurve()
 {
+    if (m_pCurve != NULL && m_isOwner == false) {
+        GeCurve2d* copiedCurve = dynamic_cast<GeCurve2d*>(m_pCurve->copy());
+        if (copiedCurve != NULL) {
+            m_pCurve = copiedCurve;
+            m_isOwner = true;
+        }
+    }
     return m_pCurve;
 }
 
@@ -125,21 +244,28 @@ GeOffsetCurve2d& GeOffsetCurve2d::operator = (const GeOffsetCurve2d& offsetCurve
     m_paramDir = offsetCurve.m_paramDir;
     m_offsetDist = offsetCurve.m_offsetDist;
     m_transform = offsetCurve.m_transform;
+    m_interval = offsetCurve.m_interval;
+    m_hasCustomInterval = offsetCurve.m_hasCustomInterval;
 
     if (offsetCurve.m_pCurve != NULL) {
         this->setCurve(*offsetCurve.m_pCurve, true);
+        m_interval = offsetCurve.m_interval;
+        m_hasCustomInterval = offsetCurve.m_hasCustomInterval;
     }
 
     return *this;
 }
 
+bool GeOffsetCurve2d::setInterval(const GeInterval& range)
+{
+    m_interval = range;
+    m_hasCustomInterval = true;
+    return true;
+}
+
 void GeOffsetCurve2d::getInterval(GeInterval& range) const
 {
-    if (m_pCurve == NULL) {
-        range.set();
-        return;
-    }
-    m_pCurve->getInterval(range);
+    range = m_interval;
 }
 
 void GeOffsetCurve2d::getInterval(GeInterval& range, GePoint2d& startPoint, GePoint2d& endPoint) const
@@ -158,15 +284,32 @@ void GeOffsetCurve2d::getInterval(GeInterval& range, GePoint2d& startPoint, GePo
 GeCurve2d& GeOffsetCurve2d::reverseParam()
 {
     m_paramDir = !m_paramDir;
-    m_offsetDist = 0.0 - m_offsetDist;
+    GeCurve2d* baseCurve = this->mutableCurve();
+    if (baseCurve != NULL) {
+        baseCurve->reverseParam();
+    }
     return *this;
 }
 
 GeOffsetCurve2d& GeOffsetCurve2d::transformBy(const GeMatrix2d& xfm)
 {
-    GeMatrix2d product;
-    product.setToProduct(xfm, m_transform);
-    m_transform = product;
+    if (xfm.isEqualTo(GeMatrix2d::kIdentity)) {
+        return *this;
+    }
+
+    double scaleFactor = 0.0;
+    if (offset2d_is_uni_scaled_ortho(xfm, scaleFactor, GeContext::gTol) == false) {
+        return *this;
+    }
+
+    m_transform *= xfm;
+
+    GeCurve2d* baseCurve = this->mutableCurve();
+    if (baseCurve != NULL) {
+        baseCurve->transformBy(xfm);
+    }
+
+    m_offsetDist *= scaleFactor;
     return *this;
 }
 
@@ -250,6 +393,14 @@ bool GeOffsetCurve2d::isEqualTo(const GeOffsetCurve2d& entity, const GeTol& tol)
         return false;
     }
 
+    if ((m_interval == entity.m_interval) == false) {
+        return false;
+    }
+
+    if (m_transform.isEqualTo(entity.m_transform, tol) == false) {
+        return false;
+    }
+
     if (m_pCurve == NULL || entity.m_pCurve == NULL) {
         return m_pCurve == entity.m_pCurve;
     }
@@ -297,14 +448,8 @@ GePoint2d GeOffsetCurve2d::closestPointTo(const GePoint2d& pnt) const
 GePoint2d GeOffsetCurve2d::closestPointTo(const GePoint2d& pnt, const GeTol& tol) const
 {
     if (m_pCurve == NULL) {
-        GePoint2d zero = GePoint2d::kOrigin;
-        zero.transformBy(m_transform);
-        return zero;
+        return GePoint2d::kOrigin;
     }
-
-    GeMatrix2d inv = m_transform.inverse();
-    GePoint2d local = pnt;
-    local.transformBy(inv);
 
     GeInterval range;
     this->getInterval(range);
@@ -315,6 +460,7 @@ GePoint2d GeOffsetCurve2d::closestPointTo(const GePoint2d& pnt, const GeTol& tol
 
     if (range.isBounded() == true) {
         int sampleCount = 129;
+        int bestIndex = 0;
         for (int i = 0; i < sampleCount; i++) {
             double ratio = 0.0;
             if (sampleCount > 1) {
@@ -322,29 +468,73 @@ GePoint2d GeOffsetCurve2d::closestPointTo(const GePoint2d& pnt, const GeTol& tol
             }
             double param = range.lowerBound() + (range.upperBound() - range.lowerBound()) * ratio;
             GePoint2d p = this->evalLocalPoint(param, tol);
-            double dist = p.distanceTo(local);
+            double dist = p.distanceTo(pnt);
             if (hasBest == false || dist < bestDist) {
                 hasBest = true;
                 bestDist = dist;
                 bestParam = param;
+                bestIndex = i;
+            }
+        }
+
+        if (hasBest == true && sampleCount > 2) {
+            double span = range.upperBound() - range.lowerBound();
+            double sampleStep = span / double(sampleCount - 1);
+            double left = bestParam;
+            double right = bestParam;
+            if (bestIndex > 0) {
+                left = bestParam - sampleStep;
+            }
+            if (bestIndex + 1 < sampleCount) {
+                right = bestParam + sampleStep;
+            }
+
+            if (right < left) {
+                double tmp = left;
+                left = right;
+                right = tmp;
+            }
+            if (left < range.lowerBound()) {
+                left = range.lowerBound();
+            }
+            if (right > range.upperBound()) {
+                right = range.upperBound();
+            }
+
+            if (right > left) {
+                for (int iter = 0; iter < 24; ++iter) {
+                    double p1 = left + (right - left) / 3.0;
+                    double p2 = right - (right - left) / 3.0;
+                    double d1 = this->evalLocalPoint(p1, tol).distanceTo(pnt);
+                    double d2 = this->evalLocalPoint(p2, tol).distanceTo(pnt);
+                    if (d1 <= d2) {
+                        right = p2;
+                    }
+                    else {
+                        left = p1;
+                    }
+                }
+
+                double refinedParam = (left + right) * 0.5;
+                double refinedDist = this->evalLocalPoint(refinedParam, tol).distanceTo(pnt);
+                if (refinedDist < bestDist) {
+                    bestDist = refinedDist;
+                    bestParam = refinedParam;
+                }
             }
         }
     }
     else {
-        GePoint2d baseClosest = m_pCurve->closestPointTo(local, tol);
+        GePoint2d baseClosest = m_pCurve->closestPointTo(pnt, tol);
         bestParam = m_pCurve->paramOf(baseClosest, tol);
         hasBest = true;
     }
 
     if (hasBest == false) {
-        GePoint2d zero = GePoint2d::kOrigin;
-        zero.transformBy(m_transform);
-        return zero;
+        return GePoint2d::kOrigin;
     }
 
-    GePoint2d result = this->evalLocalPoint(bestParam, tol);
-    result.transformBy(m_transform);
-    return result;
+    return this->evalLocalPoint(bestParam, tol);
 }
 
 GePoint2d GeOffsetCurve2d::closestPointTo(const GeCurve2d& curve2d, GePoint2d& pntOnOtherCrv) const
@@ -364,32 +554,100 @@ double GeOffsetCurve2d::paramOf(const GePoint2d& pnt) const
 
 double GeOffsetCurve2d::paramOf(const GePoint2d& pnt, const GeTol& tol) const
 {
+    if (m_pCurve == NULL) {
+        return 0.0;
+    }
+
+    if (m_pCurve->isKindOf(Ge::EntityId::kLinearEnt2d)) {
+        return m_pCurve->paramOf(pnt, tol);
+    }
+
+    if (m_pCurve->type() == Ge::EntityId::kCircArc2d) {
+        double param = m_pCurve->paramOf(pnt, tol);
+        const GeCircArc2d* arc = static_cast<const GeCircArc2d*>(m_pCurve);
+        if (arc->radius() < std::fabs(m_offsetDist) && arc->isClockWise() == false) {
+            GeInterval arcInterval;
+            arc->getInterval(arcInterval);
+            param = offset2d_move_into_valid_inter(arcInterval.lowerBound(), arcInterval.upperBound(), param + offset2d_pi());
+        }
+
+        GeInterval range;
+        this->getInterval(range);
+        if (range.isBounded()) {
+            return offset2d_clamp_to_interval(range, param);
+        }
+        return param;
+    }
+
     GeInterval range;
     this->getInterval(range);
     if (range.isBounded() == false) {
-        GePoint2d on = this->closestPointTo(pnt, tol);
-        GeMatrix2d inv = m_transform.inverse();
-        on.transformBy(inv);
-        return m_pCurve != NULL ? m_pCurve->paramOf(on, tol) : 0.0;
+        GePoint2d baseClosest = m_pCurve->closestPointTo(pnt, tol);
+        return m_pCurve->paramOf(baseClosest, tol);
     }
 
-    GeMatrix2d inv = m_transform.inverse();
-    GePoint2d local = pnt;
-    local.transformBy(inv);
-
     double bestParam = range.lowerBound();
-    double bestDist = this->evalLocalPoint(bestParam, tol).distanceTo(local);
+    double bestDist = this->evalLocalPoint(bestParam, tol).distanceTo(pnt);
+    int bestIndex = 0;
 
     int sampleCount = 129;
     for (int i = 1; i < sampleCount; i++) {
         double ratio = double(i) / double(sampleCount - 1);
         double param = range.lowerBound() + (range.upperBound() - range.lowerBound()) * ratio;
-        double dist = this->evalLocalPoint(param, tol).distanceTo(local);
+        double dist = this->evalLocalPoint(param, tol).distanceTo(pnt);
         if (dist < bestDist) {
             bestDist = dist;
             bestParam = param;
+            bestIndex = i;
         }
     }
+
+    if (sampleCount > 2) {
+        double span = range.upperBound() - range.lowerBound();
+        double sampleStep = span / double(sampleCount - 1);
+        double left = bestParam;
+        double right = bestParam;
+        if (bestIndex > 0) {
+            left = bestParam - sampleStep;
+        }
+        if (bestIndex + 1 < sampleCount) {
+            right = bestParam + sampleStep;
+        }
+
+        if (right < left) {
+            double tmp = left;
+            left = right;
+            right = tmp;
+        }
+        if (left < range.lowerBound()) {
+            left = range.lowerBound();
+        }
+        if (right > range.upperBound()) {
+            right = range.upperBound();
+        }
+
+        if (right > left) {
+            for (int iter = 0; iter < 24; ++iter) {
+                double p1 = left + (right - left) / 3.0;
+                double p2 = right - (right - left) / 3.0;
+                double d1 = this->evalLocalPoint(p1, tol).distanceTo(pnt);
+                double d2 = this->evalLocalPoint(p2, tol).distanceTo(pnt);
+                if (d1 <= d2) {
+                    right = p2;
+                }
+                else {
+                    left = p1;
+                }
+            }
+
+            double refinedParam = (left + right) * 0.5;
+            double refinedDist = this->evalLocalPoint(refinedParam, tol).distanceTo(pnt);
+            if (refinedDist < bestDist) {
+                bestParam = refinedParam;
+            }
+        }
+    }
+
     return bestParam;
 }
 
@@ -455,20 +713,7 @@ bool GeOffsetCurve2d::hasEndPoint(GePoint2d& endPoint) const
 
 double GeOffsetCurve2d::mapParam(double param) const
 {
-    if (m_paramDir == true) {
-        return param;
-    }
-
-    GeInterval range;
-    if (m_pCurve != NULL) {
-        m_pCurve->getInterval(range);
-    }
-
-    if (range.isBounded() == true) {
-        return range.lowerBound() + range.upperBound() - param;
-    }
-
-    return 0.0 - param;
+    return param;
 }
 
 GeVector2d GeOffsetCurve2d::tangentAt(double param, const GeTol& tol) const
@@ -478,20 +723,46 @@ GeVector2d GeOffsetCurve2d::tangentAt(double param, const GeTol& tol) const
     }
 
     GeInterval range;
-    m_pCurve->getInterval(range);
+    this->getInterval(range);
+    if (range.isBounded() == false) {
+        m_pCurve->getInterval(range);
+    }
     double step = offset2d_param_step(range);
 
     double mapped = this->mapParam(param);
     double p0 = mapped - step;
     double p1 = mapped + step;
 
+    if (range.isBounded()) {
+        double lower = range.lowerBound();
+        double upper = range.upperBound();
+        if (p0 < lower) {
+            p0 = lower;
+        }
+        if (p1 > upper) {
+            p1 = upper;
+        }
+        if (p1 <= p0) {
+            if (mapped <= lower) {
+                p0 = lower;
+                p1 = lower + step;
+                if (p1 > upper) {
+                    p1 = upper;
+                }
+            }
+            else {
+                p1 = upper;
+                p0 = upper - step;
+                if (p0 < lower) {
+                    p0 = lower;
+                }
+            }
+        }
+    }
+
     GePoint2d a = m_pCurve->evalPoint(p0);
     GePoint2d b = m_pCurve->evalPoint(p1);
     GeVector2d tan = b - a;
-
-    if (m_paramDir == false) {
-        tan = tan * (-1.0);
-    }
 
     if (tan.length() <= tol.equalPoint()) {
         return GeVector2d::kXAxis;
@@ -505,6 +776,10 @@ GePoint2d GeOffsetCurve2d::evalLocalPoint(double param, const GeTol& tol) const
 {
     if (m_pCurve == NULL) {
         return GePoint2d::kOrigin;
+    }
+
+    if (offset2d_is_degenerate_curve(m_pCurve, tol)) {
+        return offset2d_invalid_point();
     }
 
     double mapped = this->mapParam(param);
@@ -524,7 +799,35 @@ GePoint2d GeOffsetCurve2d::evalLocalPoint(double param, const GeTol& tol) const
 
 GePoint2d GeOffsetCurve2d::evalPoint(double param) const
 {
-    GePoint2d p = this->evalLocalPoint(param, GeContext::gTol);
-    p.transformBy(m_transform);
-    return p;
+    return this->evalLocalPoint(param, GeContext::gTol);
+}
+
+void GeOffsetCurve2d::getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const
+{
+    piece1 = NULL;
+    piece2 = NULL;
+
+    if (m_pCurve == NULL) {
+        return;
+    }
+
+    GeInterval range;
+    this->getInterval(range);
+    GeInterval exactRange = range;
+    exactRange.setTolerance(0.0);
+    if (range.isBounded() == false || exactRange.contains(param) == false) {
+        return;
+    }
+
+    GeOffsetCurve2d* offsetPiece1 = new GeOffsetCurve2d(*m_pCurve, m_offsetDist, true);
+    offsetPiece1->m_paramDir = m_paramDir;
+    offsetPiece1->m_transform = m_transform;
+    offsetPiece1->setInterval(GeInterval(range.lowerBound(), param));
+    piece1 = offsetPiece1;
+
+    GeOffsetCurve2d* offsetPiece2 = new GeOffsetCurve2d(*m_pCurve, m_offsetDist, true);
+    offsetPiece2->m_paramDir = m_paramDir;
+    offsetPiece2->m_transform = m_transform;
+    offsetPiece2->setInterval(GeInterval(param, range.upperBound()));
+    piece2 = offsetPiece2;
 }

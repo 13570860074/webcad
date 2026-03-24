@@ -211,11 +211,10 @@ static double sphere_move_into_valid_interval(double value, double start, double
 
 static void sphere_make_interval_valid(double& start, double& end, double maxSpan)
 {
-    if (end < start)
+    const double period = PI * 2.0;
+    while (end < start)
     {
-        double temp = start;
-        start = end;
-        end = temp;
+        end += period;
     }
 
     double span = end - start;
@@ -423,7 +422,7 @@ Adesk::Boolean GeSphere::isOuterNormal() const
 Adesk::Boolean GeSphere::isClosed(const GeTol &tol) const
 {
     double vSweep = std::fabs(GE_IMP_SPHERE(this->m_pImpl)->endAngleV - GE_IMP_SPHERE(this->m_pImpl)->startAngleV);
-    if (vSweep >= PI * 2.0 - tol.equalPoint())
+    if (std::fabs(vSweep - PI * 2.0) <= tol.equalVector())
     {
         return true;
     }
@@ -522,7 +521,8 @@ Adesk::Boolean GeSphere::intersectWith(const GeLinearEnt3d &line, int &intn,
 
     GePoint3d origin = line.pointOnLine();
     GeVector3d dir = line.direction();
-    if (dir.length() < tol.equalVector())
+    double a = dir.dotProduct(dir);
+    if (a < tol.equalVector())
     {
         return Adesk::kFalse;
     }
@@ -530,7 +530,7 @@ Adesk::Boolean GeSphere::intersectWith(const GeLinearEnt3d &line, int &intn,
     GeVector3d offset = origin - this->center();
     double b = 2.0 * dir.dotProduct(offset);
     double c = offset.dotProduct(offset) - sphereRadius * sphereRadius;
-    double discriminant = b * b - 4.0 * c;
+    double discriminant = b * b - 4.0 * a * c;
     if (discriminant < -tol.equalPoint())
     {
         return Adesk::kFalse;
@@ -538,7 +538,7 @@ Adesk::Boolean GeSphere::intersectWith(const GeLinearEnt3d &line, int &intn,
 
     if (std::fabs(discriminant) <= tol.equalPoint())
     {
-        double t = -b / 2.0;
+        double t = -b / (2.0 * a);
         GePoint3d hit = origin + dir * t;
         if (line.isOn(hit, tol) == false)
         {
@@ -551,8 +551,8 @@ Adesk::Boolean GeSphere::intersectWith(const GeLinearEnt3d &line, int &intn,
     }
 
     double sqrtDiscriminant = sqrt(discriminant);
-    double t1 = (-b - sqrtDiscriminant) / 2.0;
-    double t2 = (-b + sqrtDiscriminant) / 2.0;
+    double t1 = (-b - sqrtDiscriminant) / (2.0 * a);
+    double t2 = (-b + sqrtDiscriminant) / (2.0 * a);
     GePoint3d hit1 = origin + dir * t1;
     GePoint3d hit2 = origin + dir * t2;
     bool valid1 = line.isOn(hit1, tol);

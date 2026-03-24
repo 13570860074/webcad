@@ -3,6 +3,7 @@
 
 #include "GeCurve3d.h"
 #include "GeEntity3dMethods.h"
+#include "GeInterval.h"
 #include "GeMatrix3d.h"
 
 class GeOffsetCurve3d : public GeCurve3d
@@ -27,6 +28,7 @@ public:
 
     GeOffsetCurve3d& operator = (const GeOffsetCurve3d& offsetCurve);
 
+    bool setInterval(const GeInterval& range) override;
     void getInterval(GeInterval& range) const override;
     void getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const override;
     GeCurve3d& reverseParam() override;
@@ -56,6 +58,7 @@ public:
     bool hasStartPoint(GePoint3d& startPoint) const override;
     bool hasEndPoint(GePoint3d& endPoint) const override;
     GePoint3d evalPoint(double param) const override;
+    void getSplitCurves(double param, GeCurve3d*& piece1, GeCurve3d*& piece2) const override;
 
 private:
     void clearOwnedCurve();
@@ -71,6 +74,8 @@ private:
     double m_offsetDist;
     GeVector3d m_planeNormal;
     GeMatrix3d m_transform;
+    GeInterval m_interval;
+    bool m_hasCustomInterval;
 };
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef GECYLINDER_H
-#define GECYLINDER_H
+#ifndef GEELLIPCYLINDER_H
+#define GEELLIPCYLINDER_H
 
 #include "GeEntity3dMethods.h"
 #include "GeInterval.h"
@@ -8,53 +8,62 @@
 
 class GeLinearEnt3d;
 
-class GeCylinder : public GeSurface
+class GeEllipCylinder : public GeSurface
 {
 public:
-    GeCylinder();
-    GeCylinder(double radius, const GePoint3d& origin, const GeVector3d& axisOfSymmetry);
-    GeCylinder(
-        double radius,
+    GeEllipCylinder();
+    GeEllipCylinder(double minorRadius, double majorRadius, const GePoint3d& origin, const GeVector3d& axisOfSymmetry);
+    GeEllipCylinder(
+        double minorRadius,
+        double majorRadius,
         const GePoint3d& origin,
         const GeVector3d& axisOfSymmetry,
-        const GeVector3d& refAxis,
+        const GeVector3d& majorAxis,
         const GeInterval& height,
         double startAng,
         double endAng);
-    GeCylinder(const GeCylinder& cylinder);
+    GeEllipCylinder(const GeEllipCylinder& cylinder);
 
-    GEENTITY3D_METHODS(GeCylinder);
+    GEENTITY3D_METHODS(GeEllipCylinder);
 
-    double radius() const;
+    double radiusRatio() const;
+    double minorRadius() const;
+    double majorRadius() const;
     GePoint3d origin() const;
     void getAngles(double& startAng, double& endAng) const;
     void getHeight(GeInterval& height) const;
     double heightAt(double u) const;
     double getUParamScale() const;
     GeVector3d axisOfSymmetry() const;
-    GeVector3d refAxis() const;
+    GeVector3d majorAxis() const;
+    GeVector3d minorAxis() const;
     bool isOuterNormal() const;
     bool isNormalReversed() const override;
-    bool isLeftHanded() const override;
+    bool isLeftHanded() const;
     bool isClosed(const GeTol& tol = GeContext::gTol) const;
     GeSurface& reverseNormal() override;
+
     void setIsOuterNormal(bool isOuterNormal);
     void setUParamScale(double uScale = 0.0);
-
-    GeCylinder& setRadius(double radius);
-    GeCylinder& setAngles(double startAng, double endAng);
-    GeCylinder& setHeight(const GeInterval& height);
-    GeCylinder& set(double radius, const GePoint3d& origin, const GeVector3d& axisOfSym);
-    GeCylinder& set(
-        double radius,
+    GeEllipCylinder& setMinorRadius(double minorRadius);
+    GeEllipCylinder& setMajorRadius(double majorRadius);
+    GeEllipCylinder& setAngles(double startAng, double endAng);
+    GeEllipCylinder& setHeight(const GeInterval& height);
+    GeEllipCylinder& set(double minorRadius, double majorRadius, const GePoint3d& origin, const GeVector3d& axisOfSymmetry);
+    GeEllipCylinder& set(
+        double minorRadius,
+        double majorRadius,
         const GePoint3d& origin,
         const GeVector3d& axisOfSymmetry,
-        const GeVector3d& refAxis,
+        const GeVector3d& majorAxis,
         const GeInterval& height,
         double startAng,
         double endAng);
 
-    GeCylinder& operator = (const GeCylinder& cylinder);
+    bool project(const GePoint3d& pnt, GePoint3d& projPnt) const;
+    bool project(const GePoint3d& pnt, GePoint3d& projPnt, const GeTol& tol) const;
+
+    GeEllipCylinder& operator = (const GeEllipCylinder& cylinder);
 
     bool intersectWith(
         const GeLinearEnt3d& linEnt,
@@ -69,14 +78,15 @@ public:
 
 private:
     GeVector3d axisUnit() const;
-    GeVector3d refUnit() const;
-    GeVector3d orthoRefUnit() const;
+    GeVector3d majorAxisUnit() const;
+    GeVector3d minorAxisUnit() const;
 
 private:
-    double m_radius;
+    double m_minorRadius;
+    double m_majorRadius;
     GePoint3d m_origin;
     GeVector3d m_axis;
-    GeVector3d m_ref;
+    GeVector3d m_majorAxis;
     GeInterval m_height;
     double m_startAng;
     double m_endAng;

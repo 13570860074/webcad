@@ -2,6 +2,7 @@
 #define GECOMPOSITECURVE3D_H
 
 #include "GeCurve3d.h"
+#include "GeInterval.h"
 #include "GeEntity3dMethods.h"
 #include "GeCurve3dPtrArray.h"
 #include "GeDoubleArray.h"
@@ -26,6 +27,7 @@ public:
 
     GeCompositeCurve3d& operator = (const GeCompositeCurve3d& compCurve);
 
+    bool setInterval(const GeInterval& range) override;
     void getInterval(GeInterval& range) const override;
     void getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const override;
     GeCurve3d& reverseParam() override;
@@ -39,6 +41,9 @@ public:
     GePoint3d closestPointTo(const GePoint3d& pnt, const GeTol& tol) const override;
     GePoint3d closestPointTo(const GeCurve3d& curve3d, GePoint3d& pntOnOtherCrv) const override;
     GePoint3d closestPointTo(const GeCurve3d& curve3d, GePoint3d& pntOnOtherCrv, const GeTol& tol) const override;
+
+    GeEntity3d* project(const GePlane& projectionPlane, const GeVector3d& projectDirection) const override;
+    GeEntity3d* project(const GePlane& projectionPlane, const GeVector3d& projectDirection, const GeTol& tol) const override;
 
     double paramOf(const GePoint3d& pnt) const override;
     double paramOf(const GePoint3d& pnt, const GeTol& tol) const override;
@@ -69,6 +74,8 @@ private:
     GeDoubleArray m_curveStarts;
     GeDoubleArray m_curveSpans;
     double m_totalLength;
+    GeInterval m_interval;
+    bool m_hasCustomInterval;
 };
 
 #endif

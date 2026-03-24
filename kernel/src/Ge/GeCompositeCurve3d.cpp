@@ -1,6 +1,8 @@
 #include "GeCompositeCurve3d.h"
 #include "GeInterval.h"
 #include "GeLineSeg3d.h"
+#include "GePointEnt3d.h"
+#include "GePosition3d.h"
 #include <cmath>
 
 namespace {
@@ -8,10 +10,35 @@ double composite3d_abs(double v)
 {
     return v < 0.0 ? 0.0 - v : v;
 }
+
+bool composite3d_should_keep_curve(const GeCurve3d& curve)
+{
+    if (curve.type() == Ge::kPolyline3d) {
+        return true;
+    }
+
+    double span = curve.length();
+    if (span > GeContext::gTol.equalPoint()) {
+        return true;
+    }
+
+    GeInterval range;
+    curve.getInterval(range);
+    if (range.isBounded()) {
+        span = composite3d_abs(range.upperBound() - range.lowerBound());
+        if (span > GeContext::gTol.equalPoint()) {
+            return true;
+        }
+    }
+
+    return false;
+}
 }
 
 GeCompositeCurve3d::GeCompositeCurve3d()
     : m_totalLength(0.0)
+    , m_interval(0.0, 1.0)
+    , m_hasCustomInterval(false)
 {
     this->ensureDefaultCurve();
     this->rebuildParamMap();
@@ -19,12 +46,16 @@ GeCompositeCurve3d::GeCompositeCurve3d()
 
 GeCompositeCurve3d::GeCompositeCurve3d(const GeCompositeCurve3d& source)
     : m_totalLength(0.0)
+    , m_interval(0.0, 1.0)
+    , m_hasCustomInterval(false)
 {
     *this = source;
 }
 
 GeCompositeCurve3d::GeCompositeCurve3d(const GeCurve3dPtrArray& curveList)
     : m_totalLength(0.0)
+    , m_interval(0.0, 1.0)
+    , m_hasCustomInterval(false)
 {
     this->setCurveList(curveList);
 }
@@ -97,6 +128,10 @@ void GeCompositeCurve3d::rebuildParamMap()
 
     if (m_curves.length() == 0) {
         m_totalLength = 0.0;
+    }
+
+    if (!m_hasCustomInterval) {
+        m_interval.set(0.0, m_totalLength);
     }
 }
 
@@ -276,14 +311,14 @@ const GeCurve3dPtrArray& GeCompositeCurve3d::getCurveList() const
 GeCompositeCurve3d& GeCompositeCurve3d::setCurveList(const GeCurve3dPtrArray& curveList)
 {
     this->clearOwnedCurves();
+    m_hasCustomInterval = false;
 
     for (int i = 0; i < curveList.length(); i++) {
-        if (curveList[i] != NULL) {
+        if (curveList[i] != NULL && composite3d_should_keep_curve(*curveList[i])) {
             this->appendOwnedCurve(*curveList[i]);
         }
     }
 
-    this->ensureDefaultCurve();
     this->rebuildParamMap();
     return *this;
 }
@@ -312,13 +347,6 @@ double GeCompositeCurve3d::globalToLocalParam(double param, int& crvNum) const
     }
 
     double localRatio = (param - m_curveStarts[crvNum]) / span;
-    if (localRatio < 0.0) {
-        localRatio = 0.0;
-    }
-    if (localRatio > 1.0) {
-        localRatio = 1.0;
-    }
-
     return range.lowerBound() + (range.upperBound() - range.lowerBound()) * localRatio;
 }
 
@@ -363,14 +391,26 @@ GeCompositeCurve3d& GeCompositeCurve3d::operator = (const GeCompositeCurve3d& co
         }
     }
 
-    this->ensureDefaultCurve();
+    m_interval = compCurve.m_interval;
+    m_hasCustomInterval = compCurve.m_hasCustomInterval;
     this->rebuildParamMap();
     return *this;
 }
 
+bool GeCompositeCurve3d::setInterval(const GeInterval& range)
+{
+    if (m_curves.length() <= 0) {
+        return false;
+    }
+
+    m_interval = range;
+    m_hasCustomInterval = true;
+    return true;
+}
+
 void GeCompositeCurve3d::getInterval(GeInterval& range) const
 {
-    range.set(0.0, m_totalLength);
+    range = m_interval;
 }
 
 void GeCompositeCurve3d::getInterval(GeInterval& range, GePoint3d& startPoint, GePoint3d& endPoint) const
@@ -477,6 +517,75 @@ GePoint3d GeCompositeCurve3d::closestPointTo(const GeCurve3d& curve3d, GePoint3d
     return best;
 }
 
+GeEntity3d* GeCompositeCurve3d::project(const GePlane& projectionPlane, const GeVector3d& projectDirection) const
+{
+    return this->project(projectionPlane, projectDirection, GeContext::gTol);
+}
+
+GeEntity3d* GeCompositeCurve3d::project(const GePlane& projectionPlane, const GeVector3d& projectDirection, const GeTol& tol) const
+{
+    if (m_curves.length() <= 0) {
+        return NULL;
+    }
+
+    GeCurve3dPtrArray projectedSegments;
+    GePoint3d lastPoint = GePoint3d::kOrigin;
+    bool hasLastPoint = false;
+
+    for (int i = 0; i < m_curves.length(); ++i) {
+        const GeCurve3d* pCurve = static_cast<const GeCurve3d*>(m_curves[i]);
+        if (pCurve == NULL) {
+            continue;
+        }
+
+        GeEntity3d* pProjectedEntity = pCurve->project(projectionPlane, projectDirection, tol);
+        if (pProjectedEntity == NULL) {
+            for (int j = 0; j < projectedSegments.length(); ++j) {
+                delete projectedSegments[j];
+            }
+            return NULL;
+        }
+
+        if (pProjectedEntity->isKindOf(Ge::kCurve3d)) {
+            GeCurve3d* pProjectedCurve = static_cast<GeCurve3d*>(pProjectedEntity);
+            projectedSegments.append(pProjectedCurve);
+
+            GePoint3d endPoint;
+            if (pProjectedCurve->hasEndPoint(endPoint)) {
+                lastPoint = endPoint;
+                hasLastPoint = true;
+            }
+        }
+        else if (pProjectedEntity->isKindOf(Ge::kPointEnt3d)) {
+            GePointEnt3d* pPoint = static_cast<GePointEnt3d*>(pProjectedEntity);
+            lastPoint = pPoint->point3d();
+            hasLastPoint = true;
+            delete pProjectedEntity;
+        }
+        else {
+            delete pProjectedEntity;
+            for (int j = 0; j < projectedSegments.length(); ++j) {
+                delete projectedSegments[j];
+            }
+            return NULL;
+        }
+    }
+
+    if (projectedSegments.length() > 0) {
+        GeCompositeCurve3d* pResult = new GeCompositeCurve3d(projectedSegments);
+        for (int i = 0; i < projectedSegments.length(); ++i) {
+            delete projectedSegments[i];
+        }
+        return pResult;
+    }
+
+    if (hasLastPoint) {
+        return new GePosition3d(lastPoint);
+    }
+
+    return NULL;
+}
+
 double GeCompositeCurve3d::paramOf(const GePoint3d& pnt) const
 {
     return this->paramOf(pnt, GeContext::gTol);
@@ -576,40 +685,47 @@ bool GeCompositeCurve3d::hasStartPoint(GePoint3d& startPoint) const
         return false;
     }
 
-    const GeCurve3d* pCurve = static_cast<const GeCurve3d*>(m_curves[0]);
-    if (pCurve == NULL) {
+    GeInterval range;
+    this->getInterval(range);
+    if (!range.isBoundedBelow()) {
         return false;
     }
 
-    return pCurve->hasStartPoint(startPoint);
+    startPoint = this->evalPoint(range.lowerBound());
+    return true;
 }
 
 bool GeCompositeCurve3d::hasEndPoint(GePoint3d& endPoint) const
 {
-    int count = m_curves.length();
-    if (count <= 0) {
+    if (m_curves.length() <= 0) {
         return false;
     }
 
-    const GeCurve3d* pCurve = static_cast<const GeCurve3d*>(m_curves[count - 1]);
-    if (pCurve == NULL) {
+    GeInterval range;
+    this->getInterval(range);
+    if (!range.isBoundedAbove()) {
         return false;
     }
 
-    return pCurve->hasEndPoint(endPoint);
+    endPoint = this->evalPoint(range.upperBound());
+    return true;
 }
 
 GePoint3d GeCompositeCurve3d::evalPoint(double param) const
 {
+    if (m_curves.length() <= 0) {
+        return GePoint3d();
+    }
+
     int curveIndex = -1;
     double localParam = this->globalToLocalParam(param, curveIndex);
     if (curveIndex < 0 || curveIndex >= m_curves.length()) {
-        return GePoint3d::kOrigin;
+        return GePoint3d();
     }
 
     const GeCurve3d* pCurve = static_cast<const GeCurve3d*>(m_curves[curveIndex]);
     if (pCurve == NULL) {
-        return GePoint3d::kOrigin;
+        return GePoint3d();
     }
 
     return pCurve->evalPoint(localParam);

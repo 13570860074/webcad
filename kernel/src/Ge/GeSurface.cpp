@@ -2,6 +2,19 @@
 #include "GeInterval.h"
 #include "GePointOnSurface.h"
 
+namespace {
+static bool ge_surface_interval_contains_with_tol(const GeInterval& range, double value, const GeTol& tol)
+{
+	if (range.isBoundedBelow() && value < range.lowerBound() - tol.equalPoint()) {
+		return false;
+	}
+	if (range.isBoundedAbove() && value > range.upperBound() + tol.equalPoint()) {
+		return false;
+	}
+	return true;
+}
+}
+
 
 GeSurface::GeSurface() {
 
@@ -30,7 +43,17 @@ bool GeSurface::isOn(const GePoint3d& pnt, GePoint2d& paramPoint) const {
 }
 bool GeSurface::isOn(const GePoint3d& pnt, GePoint2d& paramPoint, const GeTol& tol) const {
 	paramPoint = this->paramOf(pnt, tol);
-	return this->evalPoint(paramPoint).isEqualTo(pnt, tol);
+	GePoint3d answer3d = this->evalPoint(paramPoint);
+	double distance = answer3d.distanceTo(pnt);
+	if (distance > tol.equalPoint()) {
+		return false;
+	}
+
+	GeInterval rangeU;
+	GeInterval rangeV;
+	this->getEnvelope(rangeU, rangeV);
+	return ge_surface_interval_contains_with_tol(rangeU, paramPoint.x, tol)
+		&& ge_surface_interval_contains_with_tol(rangeV, paramPoint.y, tol);
 }
 
 GePoint3d GeSurface::closestPointTo(const GePoint3d& pnt) const {

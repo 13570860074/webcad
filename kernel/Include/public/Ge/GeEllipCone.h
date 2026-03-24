@@ -1,43 +1,47 @@
-#ifndef GECONE_H
-#define GECONE_H
+#ifndef GEELLIPCONE_H
+#define GEELLIPCONE_H
 
 #include "GeEntity3dMethods.h"
 #include "GeInterval.h"
 #include "GeMatrix3d.h"
+#include "GePointOnSurface.h"
 #include "GeSurface.h"
 
 class GeLinearEnt3d;
 
-class GeCone : public GeSurface
+class GeEllipCone : public GeSurface
 {
 public:
-    GeCone();
-    GeCone(double cosineAngle, double sineAngle, const GePoint3d& baseOrigin, double baseRadius, const GeVector3d& axisOfSymmetry);
-    GeCone(
+    GeEllipCone();
+    GeEllipCone(double cosineAngle, double sineAngle, const GePoint3d& origin, double minorRadius, double majorRadius, const GeVector3d& axisOfSymmetry);
+    GeEllipCone(
         double cosineAngle,
         double sineAngle,
         const GePoint3d& baseOrigin,
-        double baseRadius,
+        double minorRadius,
+        double majorRadius,
         const GeVector3d& axisOfSymmetry,
-        const GeVector3d& refAxis,
+        const GeVector3d& majorAxis,
         const GeInterval& height,
         double startAng,
         double endAng);
-    GeCone(const GeCone& cone);
+    GeEllipCone(const GeEllipCone& cone);
 
-    GEENTITY3D_METHODS(GeCone);
+    GEENTITY3D_METHODS(GeEllipCone);
 
-    double baseRadius() const;
+    double radiusRatio() const;
+    double minorRadius() const;
+    double majorRadius() const;
     GePoint3d baseCenter() const;
     void getAngles(double& startAng, double& endAng) const;
     double halfAngle() const;
     void getHalfAngle(double& cosineAngle, double& sineAngle) const;
-    void getHalfAngleSigned(double& cosineAngle, double& sineAngle) const;
     void getHeight(GeInterval& height) const;
     double heightAt(double u) const;
     double getUParamScale() const;
     GeVector3d axisOfSymmetry() const;
-    GeVector3d refAxis() const;
+    GeVector3d majorAxis() const;
+    GeVector3d minorAxis() const;
     GePoint3d apex() const;
     bool isClosed(const GeTol& tol = GeContext::gTol) const;
     bool isOuterNormal() const;
@@ -46,30 +50,33 @@ public:
     GeSurface& reverseNormal() override;
     void setUParamScale(double uScale = 0.0);
 
-    GeCone& setBaseRadius(double baseRadius);
-    GeCone& setBaseCenter(const GePoint3d& baseOrigin);
-    GeCone& setAngles(double startAng, double endAng);
-    GeCone& setHeight(const GeInterval& height);
+    GeEllipCone& setMinorRadius(double minorRadius);
+    GeEllipCone& setMajorRadius(double majorRadius);
+    GeEllipCone& setAngles(double startAng, double endAng);
+    GeEllipCone& setHeight(const GeInterval& height);
+    double getPoleParam() const;
     bool project(const GePoint3d& pnt, GePoint3d& projPnt) const;
     bool project(const GePoint3d& pnt, GePoint3d& projPnt, const GeTol& tol) const;
-    GeCone& set(
+    GeEllipCone& set(
         double cosineAngle,
         double sineAngle,
-        const GePoint3d& baseOrigin,
-        double baseRadius,
+        const GePoint3d& origin,
+        double minorRadius,
+        double majorRadius,
         const GeVector3d& axisOfSymmetry);
-    GeCone& set(
+    GeEllipCone& set(
         double cosineAngle,
         double sineAngle,
         const GePoint3d& baseOrigin,
-        double baseRadius,
+        double minorRadius,
+        double majorRadius,
         const GeVector3d& axisOfSymmetry,
-        const GeVector3d& refAxis,
+        const GeVector3d& majorAxis,
         const GeInterval& height,
         double startAng,
         double endAng);
 
-    GeCone& operator = (const GeCone& cone);
+    GeEllipCone& operator = (const GeEllipCone& cone);
 
     bool intersectWith(
         const GeLinearEnt3d& linEnt,
@@ -88,18 +95,20 @@ public:
 
 private:
     GeVector3d axisUnit() const;
-    GeVector3d refUnit() const;
-    GeVector3d orthoRefUnit() const;
+    GeVector3d majorAxisUnit() const;
+    GeVector3d minorAxisUnit() const;
     double signedTanHalfAngle() const;
-    double radiusAt(double u) const;
+    double majorRadiusAt(double u) const;
+    double minorRadiusAt(double u) const;
 
 private:
     double m_cosHalf;
     double m_sinHalf;
+    double m_minorRadius;
+    double m_majorRadius;
     GePoint3d m_baseCenter;
-    double m_baseRadius;
     GeVector3d m_axis;
-    GeVector3d m_ref;
+    GeVector3d m_majorAxis;
     GeInterval m_height;
     double m_startAng;
     double m_endAng;

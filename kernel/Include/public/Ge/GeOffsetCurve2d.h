@@ -3,6 +3,7 @@
 
 #include "GeCurve2d.h"
 #include "GeEntity2dMethods.h"
+#include "GeInterval.h"
 #include "GeMatrix2d.h"
 
 class GeOffsetCurve2d : public GeCurve2d
@@ -25,6 +26,7 @@ public:
 
     GeOffsetCurve2d& operator = (const GeOffsetCurve2d& offsetCurve);
 
+    bool setInterval(const GeInterval& range) override;
     void getInterval(GeInterval& range) const override;
     void getInterval(GeInterval& range, GePoint2d& startPoint, GePoint2d& endPoint) const override;
     GeCurve2d& reverseParam() override;
@@ -54,6 +56,7 @@ public:
     bool hasStartPoint(GePoint2d& startPoint) const override;
     bool hasEndPoint(GePoint2d& endPoint) const override;
     GePoint2d evalPoint(double param) const override;
+    void getSplitCurves(double param, GeCurve2d*& piece1, GeCurve2d*& piece2) const override;
 
 private:
     void clearOwnedCurve();
@@ -68,6 +71,8 @@ private:
     bool m_paramDir;
     double m_offsetDist;
     GeMatrix2d m_transform;
+    GeInterval m_interval;
+    bool m_hasCustomInterval;
 };
 
 #endif
