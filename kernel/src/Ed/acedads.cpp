@@ -306,14 +306,15 @@ int acedGetEnv(const ACHAR *sym, ACHAR *var, size_t nBufLen)
 		return RTERROR;
 	}
 	AcString str = variable->variable();
-	for (int i = 0; i < str.length(); i++)
+	const unsigned int strLength = str.length();
+	for (unsigned int i = 0; i < strLength; i++)
 	{
 		if (i >= nBufLen)
 		{
 			break;
 		}
-		var[i] = str[i];
-		if (i == str.length() - 1)
+		var[i] = str.at(i);
+		if (i == strLength - 1)
 		{
 			var[i + 1] = '\0';
 			break;
@@ -371,14 +372,15 @@ int acedGetCfg(const ACHAR *sym, ACHAR *var, size_t len)
 		return RTERROR;
 	}
 	AcString str = variable->variable();
-	for (int i = 0; i < str.length(); i++)
+	const unsigned int strLength = str.length();
+	for (unsigned int i = 0; i < strLength; i++)
 	{
 		if (i >= len)
 		{
 			break;
 		}
-		var[i] = str[i];
-		if (i == str.length() - 1)
+		var[i] = str.at(i);
+		if (i == strLength - 1)
 		{
 			var[i + 1] = '\0';
 			break;

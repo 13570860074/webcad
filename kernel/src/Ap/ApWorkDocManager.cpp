@@ -89,14 +89,15 @@ AcString ApWorkDocManager::extractStack(const ACHAR ch)const {
 	AcString cmd;
 	AcString newStack;
 	bool isFind = false;
-	for (int i = 0; i < AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack.length(); i++) {
+	const unsigned int executeStackLength = AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack.length();
+	for (unsigned int i = 0; i < executeStackLength; i++) {
 		if (isFind == false) {
-			cmd += AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack[i];
+			cmd += AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack.at(i);
 		}
 		else if (isFind == true) {
-			newStack += AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack[i];
+			newStack += AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack.at(i);
 		}
-		if (AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack[i] == ch) {
+		if (AP_IMP_DOCMANAGERIMPL(this->m_pImpl)->executeStack.at(i) == ch) {
 			isFind = true;
 		}
 	}

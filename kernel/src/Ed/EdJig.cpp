@@ -245,17 +245,18 @@ void EdJig::setDispPrompt(const ACHAR* args, ...)
 	dispPrompt += prompt;
 
 	AcString str;
-	for (int i = 0; i < dispPrompt.length(); i++)
+	const unsigned int dispPromptLength = dispPrompt.length();
+	for (unsigned int i = 0; i < dispPromptLength; i++)
 	{
-		if (dispPrompt[i] == '\n')
+		if (dispPrompt.at(i) == '\n')
 		{
-			str += dispPrompt[i];
+			str += dispPrompt.at(i);
 			acedPrompt(str.constPtr());
 			str.clear();
 		}
 		else
 		{
-			str += dispPrompt[i];
+			str += dispPrompt.at(i);
 		}
 	}
 
@@ -270,9 +271,10 @@ EdJig::DragStatus EdJig::acquireString(AcString& s)
 }
 EdJig::DragStatus EdJig::acquireString(ACHAR(&str)[2049])
 {
-	for (int i = 0; i < ED_IMP_JIG(this->m_pImpl)->inputString.length(); i++)
+	const unsigned int inputStringLength = ED_IMP_JIG(this->m_pImpl)->inputString.length();
+	for (unsigned int i = 0; i < inputStringLength; i++)
 	{
-		str[i] = ED_IMP_JIG(this->m_pImpl)->inputString[i];
+		str[i] = ED_IMP_JIG(this->m_pImpl)->inputString.at(i);
 		if (i >= 2049 - 1)
 		{
 			str[i + 1] = '\0';

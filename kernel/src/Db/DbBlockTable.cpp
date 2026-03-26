@@ -72,11 +72,11 @@ Acad::ErrorStatus DbBlockTable::add(DbObjectId& recordId, DbBlockTableRecord* pR
 		}
 
 		// 判断是否是布局块表记录
-		if (blockName.length() > 1 && blockName[0] == '*')
+		if (blockName.length() > 1 && blockName.at(0) == '*')
 		{
 
 			/* 匿名块 */
-			if (blockName[1] == 'U')
+			if (blockName.at(1) == 'U')
 			{
 
 				AcString key;

@@ -80,14 +80,15 @@ EdJig::DragStatus EdDimJig::drag()
 		bool isCustomString = false;
 		AcString customString;
 		AcString dispPrompt = this->dispPrompt();
-		for (int i = 0; i < dispPrompt.length(); i++)
+		const unsigned int dispPromptLength = dispPrompt.length();
+		for (unsigned int i = 0; i < dispPromptLength; i++)
 		{
-			if (isCustomString == false && dispPrompt[i] == '<')
+			if (isCustomString == false && dispPrompt.at(i) == '<')
 			{
 				isCustomString = true;
 				continue;
 			}
-			if (isCustomString == true && dispPrompt[i] == '>')
+			if (isCustomString == true && dispPrompt.at(i) == '>')
 			{
 				isExistence = true;
 				isCustomString = false;
@@ -95,7 +96,7 @@ EdJig::DragStatus EdDimJig::drag()
 			}
 			if (isCustomString == true)
 			{
-				customString += dispPrompt[i];
+				customString += dispPrompt.at(i);
 			}
 		}
 		if (customString.length() > 0 && isExistence == true)
@@ -254,23 +255,24 @@ bool EdDimJig::acquireKword(AcString &kword)
 	AcString key;
 	AcArray<AcString> keys;
 	AcString keyInput = this->keywordList();
-	for (int i = 0; i < keyInput.length(); i++)
+	const unsigned int keyInputLength = keyInput.length();
+	for (unsigned int i = 0; i < keyInputLength; i++)
 	{
-		if (keyInput[i] == ' ')
+		if (keyInput.at(i) == ' ')
 		{
 			keys.append(key);
 			key.clear();
 			continue;
 		}
-		else if (i == keyInput.length() - 1)
+		else if (i == keyInputLength - 1)
 		{
-			key += keyInput[i];
+			key += keyInput.at(i);
 			keys.append(key);
 			key.clear();
 			continue;
 		}
 
-		key += keyInput[i];
+		key += keyInput.at(i);
 	}
 
 	bool isKey = false;
@@ -344,20 +346,21 @@ EdJig::DragStatus EdDimJig::sampler()
 		AcString str;
 		AcArray<AcString> keys;
 		AcString keyword = AcString(this->keywordList());
-		for (int i = 0; i < keyword.length(); i++)
+		const unsigned int keywordLength = keyword.length();
+		for (unsigned int i = 0; i < keywordLength; i++)
 		{
-			if (keyword[i] == ' ' || i == keyword.length() - 1)
+			if (keyword.at(i) == ' ' || i == keywordLength - 1)
 			{
-				if (i == keyword.length() - 1)
+				if (i == keywordLength - 1)
 				{
-					str += keyword[i];
+					str += keyword.at(i);
 				}
 				keys.append(str);
 				str = "";
 				continue;
 			}
 
-			str += keyword[i];
+			str += keyword.at(i);
 		}
 
 		for (int i = 0; i < keys.length(); i++)
