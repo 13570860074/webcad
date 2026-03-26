@@ -1,10 +1,6 @@
 #ifndef DLL_H
 #define DLL_H
 
-#define EXPORT __declspec (dllexport) 
-#define STATIC_EXPORT __declspec (dllexport) 
-
-
 #include <stdio.h>
 #include "PlatformSettings.h"
 
@@ -13,6 +9,9 @@
 
 
 #if(__EMSCRIPTEN__)
+
+#define EXPORT
+#define STATIC_EXPORT
 
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
@@ -26,6 +25,9 @@ using namespace emscripten;
 #else
 
 #define WINDOWS 1
+
+#define EXPORT __declspec(dllexport)
+#define STATIC_EXPORT __declspec(dllexport)
 
 #define em_protected protected
 #define em_public public
