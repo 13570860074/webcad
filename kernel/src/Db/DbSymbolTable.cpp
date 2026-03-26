@@ -54,6 +54,8 @@ bool DbSymbolTable::has(DbObjectId id) const
 			if (pRecord->objectId() == id)
 			{
 				isHas = true;
+				pRecord->close();
+				break;
 			}
 
 			pRecord->close();
@@ -68,13 +70,13 @@ bool DbSymbolTable::has(DbObjectId id) const
 
 Acad::ErrorStatus DbSymbolTable::add(DbSymbolTableRecord *pRecord)
 {
-	DbObjectId recordId = NULL;
+	DbObjectId recordId(0);
 	return add(recordId, pRecord);
 }
 Acad::ErrorStatus DbSymbolTable::add(DbObjectId &recordId, DbSymbolTableRecord *pRecord)
 {
 	this->database()->addDbObject(recordId, pRecord);
-	if (recordId == NULL)
+	if (recordId.isNull())
 	{
 		return Acad::ErrorStatus::eFail;
 	}
@@ -103,7 +105,7 @@ Acad::ErrorStatus DbSymbolTable::newIterator(DbSymbolTableIterator *&pIterator,
 
 	DB_IMP_SYMBOLTABLEITERATOR(pIterator->m_pImpl)->iterator = AcIterator<RxObject *>((AcArray<RxObject *> &)objs);
 
-	return Acad::ErrorStatus::eFail;
+	return Acad::ErrorStatus::eOk;
 }
 
 #if EMSDK

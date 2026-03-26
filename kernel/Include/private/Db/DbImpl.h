@@ -17,6 +17,9 @@
 #include "GePoint3d.h"
 #include "GeVector3d.h"
 #include "GeMatrix3d.h"
+#include "GeDoubleArray.h"
+#include "GePoint3dArray.h"
+#include "GePoint2dArray.h"
 #include "GiTextStyle.h"
 #include "DbHandle.h"
 #include "DbObjectId.h"
@@ -44,6 +47,9 @@
 #define DB_IMP_CIRCLE(x) ((DbCircleImpl *)x)
 #define DB_IMP_ARC(x) ((DbArcImpl *)x)
 #define DB_IMP_ELLIPSE(x) ((DbEllipseImpl *)x)
+#define DB_IMP_SPLINE(x) ((DbSplineImpl *)x)
+#define DB_IMP_LEADER(x) ((DbLeaderImpl *)x)
+#define DB_IMP_HATCH(x) ((DbHatchImpl *)x)
 #define DB_IMP_POLYLINE(x) ((DbPolylineImpl *)x)
 #define DB_IMP_TEXT(x) ((DbTextImpl *)x)
 #define DB_IMP_MTEXT(x) ((DbMTextImpl *)x)
@@ -124,7 +130,8 @@ public:
 	}
 	virtual ~DbObjectManagerImpl()
 	{
-
+		delete this->handleManage;
+		this->handleManage = NULL;
 	}
 
 	unsigned int overallId;
@@ -246,6 +253,7 @@ public:
 	}
 	virtual ~DbDwgUndoFilerImpl()
 	{
+		delete this->buff;
 		this->buff = NULL;
 	}
 };
@@ -604,6 +612,106 @@ public:
 	double radiusRatio;
 	double startAngle;
 	double endAngle;
+};
+class DbSplineImpl : public DbCurveImpl
+{
+public:
+	DbSplineImpl()
+	{
+		this->degree = 3;
+		this->rational = false;
+		this->closed = false;
+		this->periodic = false;
+		this->fitTolerance = 0.0000001;
+		this->normal = GeVector3d::kZAxis;
+		this->startTangent = GeVector3d(0, 0, 0);
+		this->endTangent = GeVector3d(0, 0, 0);
+	}
+	virtual ~DbSplineImpl() {}
+
+	int degree;
+	bool rational;
+	bool closed;
+	bool periodic;
+	GePoint3dArray controlPoints;
+	GeDoubleArray knots;
+	GeDoubleArray weights;
+	GePoint3dArray fitPoints;
+	double fitTolerance;
+	GeVector3d startTangent;
+	GeVector3d endTangent;
+	GeVector3d normal;
+};
+class DbLeaderImpl : public DbCurveImpl
+{
+public:
+	DbLeaderImpl()
+	{
+		this->normal = GeVector3d::kZAxis;
+		this->hasArrowHead = true;
+		this->isSplined = false;
+		this->annoType = 3;
+		this->annotationOffset = GeVector3d(0, 0, 0);
+	}
+	virtual ~DbLeaderImpl() {}
+
+	GeVector3d normal;
+	AcArray<GePoint3d> vertices;
+	bool hasArrowHead;
+	bool isSplined;
+	DbObjectId dimStyleId;
+	DbObjectId annotationId;
+	int annoType;
+	GeVector3d annotationOffset;
+};
+class DbHatchLoopImpl
+{
+public:
+        DbHatchLoopImpl()
+        {
+                this->loopType = 0;
+        }
+        virtual ~DbHatchLoopImpl() {}
+
+        int loopType;
+        GePoint2dArray vertices;
+        GeDoubleArray bulges;
+};
+class DbHatchImpl : public DbEntityImpl
+{
+public:
+        DbHatchImpl()
+        {
+                this->elevation = 0.0;
+                this->normal = GeVector3d(0, 0, 1);
+                this->patternType = 0;
+                this->patternAngle = 0.0;
+                this->patternScale = 1.0;
+                this->patternSpace = 1.0;
+                this->patternDouble = false;
+                this->hatchStyle = 0;
+                this->associative = false;
+        }
+        virtual ~DbHatchImpl()
+        {
+                for (int i = 0; i < this->loops.length(); i++) {
+                        delete this->loops[i];
+                }
+                this->loops.removeAll();
+        }
+
+        double elevation;
+        GeVector3d normal;
+        int patternType;
+        AcString patternName;
+        double patternAngle;
+        double patternScale;
+        double patternSpace;
+        bool patternDouble;
+        int hatchStyle;
+        bool associative;
+        AcArray<DbHatchLoopImpl*> loops;
+        AcArray<GePoint2d> seedPoints;
 };
 class DbPolylineSegImpl
 {

@@ -70,12 +70,11 @@ DbEntity* DbEntityStake::rootEntity() {
 }
 GeMatrix3d DbEntityStake::rootMatrix() {
 	GeMatrix3d mat;
-	while (true) {
-		if (this->previous() == NULL) {
-			break;
-		}
-		if (this->previous()->m_matrix != NULL) {
-			mat *= this->previous()->matrix();
+	DbEntityStake* p = this;
+	while (p->previous() != NULL) {
+		p = p->previous();
+		if (p->m_matrix != NULL) {
+			mat *= p->matrix();
 		}
 	}
 	return mat;

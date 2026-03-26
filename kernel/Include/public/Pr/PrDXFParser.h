@@ -69,6 +69,7 @@ public:
 		kSpline,
 		kAttdef,
 		kViewport,
+		kHatch,
 
 		kDictionary,
 		kXdata,

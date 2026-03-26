@@ -50,7 +50,7 @@ bool DbObject::subOpen(Db::OpenMode mode)
 	{
 		if (mode == Db::OpenMode::kForWrite || mode == Db::OpenMode::kForNotify)
 		{
-			const AcArray<DbDatabaseReactor*> reactors = this->database()->pImpl->reactors;
+			const AcArray<DbDatabaseReactor*>& reactors = this->database()->pImpl->reactors;
 			for (int i = 0; i < reactors.length(); i++)
 			{
 				reactors.at(i)->objectOpenedForModify(this->database(), this);
@@ -66,7 +66,7 @@ void DbObject::close()
 	if (this->isWriteEnabled() == true || this->isNotifyEnabled() == true) {
 		/* 触发数据库反应器修改对象事件 */
 		if (this->database() != NULL) {
-			const AcArray<DbDatabaseReactor*> reactors = ((DbDatabaseImpl*)this->database()->pImpl)->reactors;
+			const AcArray<DbDatabaseReactor*>& reactors = ((DbDatabaseImpl*)this->database()->pImpl)->reactors;
 			for (int i = 0; i < reactors.length(); i++) {
 				reactors.at(i)->objectModified(this->database(), this);
 			}
@@ -86,8 +86,8 @@ bool DbObject::erase()
 }
 bool DbObject::erase(bool eraseIt)
 {
-	bool isErase = false;
-	return isErase;
+	this->subErase(eraseIt);
+	return true;
 }
 bool DbObject::subErase(bool erasing)
 {
@@ -100,7 +100,8 @@ bool DbObject::isErased() const
 }
 bool DbObject::isReadEnabled() const
 {
-	if (DB_IMP_OBJECT(this->m_pImpl)->mode == Db::OpenMode::kForRead)
+	Db::OpenMode mode = DB_IMP_OBJECT(this->m_pImpl)->mode;
+	if (mode == Db::OpenMode::kForRead || mode == Db::OpenMode::kForWrite || mode == Db::OpenMode::kForNotify)
 	{
 		return true;
 	}
@@ -158,7 +159,15 @@ void DbObject::assertReadEnabled() const
 }
 void DbObject::assertWriteEnabled(Adesk::Boolean autoUndo, Adesk::Boolean recordModified)
 {
+	bool needReactor = (DB_IMP_OBJECT(this->m_pImpl)->mode == Db::OpenMode::kNotOpen ||
+		DB_IMP_OBJECT(this->m_pImpl)->mode == Db::OpenMode::kForRead);
 	DB_IMP_OBJECT(this->m_pImpl)->mode = Db::OpenMode::kForWrite;
+	if (needReactor && this->database() != NULL) {
+		const AcArray<DbDatabaseReactor*>& reactors = this->database()->pImpl->reactors;
+		for (int i = 0; i < reactors.length(); i++) {
+			reactors.at(i)->objectOpenedForModify(this->database(), this);
+		}
+	}
 }
 void DbObject::assertNotifyEnabled() const
 {

@@ -15,6 +15,7 @@ DbObjectManager::DbObjectManager()
 }
 DbObjectManager::~DbObjectManager()
 {
+	delete (DbObjectManagerImpl*)this->m_pImpl;
 }
 
 void DbObjectManager::onBeginAnimationFrame(DbObjectManager *pointer)
