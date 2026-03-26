@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="E:\Project\webcad\kernel\build\CMakeFiles\5a4c1c82a837eb3a319ec9b9d4e26cc4\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{BE6A5FB8-5363-363F-95F8-611B02DD8946}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

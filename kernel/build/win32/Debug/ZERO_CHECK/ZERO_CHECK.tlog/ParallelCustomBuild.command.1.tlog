@@ -1,0 +1,10 @@
+^E:\PROJECT\WEBCAD\KERNEL\BUILD\CMAKEFILES\5A4C1C82A837EB3A319EC9B9D4E26CC4\GENERATE.STAMP.RULE
+setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SE:/Project/webcad/kernel -BE:/Project/webcad/kernel/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file E:/Project/webcad/kernel/build/kernel_app.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

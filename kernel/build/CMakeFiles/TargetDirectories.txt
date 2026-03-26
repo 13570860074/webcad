@@ -1,0 +1,17 @@
+E:/Project/webcad/kernel/build/CMakeFiles/Ac.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Ge.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Ev.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Rx.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Ut.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Ap.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Db.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Gi.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Gs.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Ed.dir
+E:/Project/webcad/kernel/build/CMakeFiles/App.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Re.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Pr.dir
+E:/Project/webcad/kernel/build/CMakeFiles/Kernel.dir
+E:/Project/webcad/kernel/build/CMakeFiles/main.dir
+E:/Project/webcad/kernel/build/CMakeFiles/ALL_BUILD.dir
+E:/Project/webcad/kernel/build/CMakeFiles/ZERO_CHECK.dir

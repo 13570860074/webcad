@@ -1,0 +1,78 @@
+{
+	"backtrace" : 0,
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : 
+		[
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"id" : "Ev::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Rx::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Ut::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Ap::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Ge::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Ac::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Db::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Gi::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Gs::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "App::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Re::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Pr::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Kernel::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "Ed::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "main::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "ZERO_CHECK::@6890427a1f51a3e7e1df"
+		}
+	],
+	"id" : "ALL_BUILD::@6890427a1f51a3e7e1df",
+	"isGeneratorProvided" : true,
+	"name" : "ALL_BUILD",
+	"paths" : 
+	{
+		"build" : ".",
+		"source" : "."
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}

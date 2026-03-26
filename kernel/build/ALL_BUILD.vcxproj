@@ -1,0 +1,239 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x86</PreferredToolArchitecture>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ResolveNugetPackages>false</ResolveNugetPackages>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|win32">
+      <Configuration>Debug</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|win32">
+      <Configuration>Release</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|win32">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|win32">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{40DE6401-5160-3515-9CDF-66D47A8021F4}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <Platform>win32</Platform>
+    <ProjectName>ALL_BUILD</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\Project\webcad\kernel\Include;E:\Project\webcad\kernel\Include\public;E:\Project\webcad\kernel\Include\public\Ac;E:\Project\webcad\kernel\Include\public\Ge;E:\Project\webcad\kernel\Include\public\Db;E:\Project\webcad\kernel\Include\public\Ap;E:\Project\webcad\kernel\Include\public\Gi;E:\Project\webcad\kernel\Include\public\Gs;E:\Project\webcad\kernel\Include\public\Rx;E:\Project\webcad\kernel\Include\public\Ed;E:\Project\webcad\kernel\Include\public\Pr;E:\Project\webcad\kernel\Include\public\Ui;E:\Project\webcad\kernel\Include\public\Ev;E:\Project\webcad\kernel\Include\public\Emscripten;E:\Project\webcad\kernel\Include\public\App;E:\Project\webcad\kernel\Include\private;E:\Project\webcad\kernel\Include\private\kernel;E:\Project\webcad\kernel\Include\private\Ac;E:\Project\webcad\kernel\Include\private\Ge;E:\Project\webcad\kernel\Include\private\Ap;E:\Project\webcad\kernel\Include\private\Rx;E:\Project\webcad\kernel\Include\private\Db;E:\Project\webcad\kernel\Include\private\Gi;E:\Project\webcad\kernel\Include\private\Re;E:\Project\webcad\kernel\Include\private\Gs;E:\Project\webcad\kernel\Include\private\Ed;E:\Project\webcad\kernel\Include\private\Ui;E:\Project\webcad\kernel\Include\private\Ut;E:\Project\webcad\kernel\Include\private\Ev;E:\Project\webcad\kernel\Include\private\Emscripten;E:\Project\webcad\kernel\Include\private\App;E:\Project\webcad\kernel\3rdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\Project\webcad\kernel\Include;E:\Project\webcad\kernel\Include\public;E:\Project\webcad\kernel\Include\public\Ac;E:\Project\webcad\kernel\Include\public\Ge;E:\Project\webcad\kernel\Include\public\Db;E:\Project\webcad\kernel\Include\public\Ap;E:\Project\webcad\kernel\Include\public\Gi;E:\Project\webcad\kernel\Include\public\Gs;E:\Project\webcad\kernel\Include\public\Rx;E:\Project\webcad\kernel\Include\public\Ed;E:\Project\webcad\kernel\Include\public\Pr;E:\Project\webcad\kernel\Include\public\Ui;E:\Project\webcad\kernel\Include\public\Ev;E:\Project\webcad\kernel\Include\public\Emscripten;E:\Project\webcad\kernel\Include\public\App;E:\Project\webcad\kernel\Include\private;E:\Project\webcad\kernel\Include\private\kernel;E:\Project\webcad\kernel\Include\private\Ac;E:\Project\webcad\kernel\Include\private\Ge;E:\Project\webcad\kernel\Include\private\Ap;E:\Project\webcad\kernel\Include\private\Rx;E:\Project\webcad\kernel\Include\private\Db;E:\Project\webcad\kernel\Include\private\Gi;E:\Project\webcad\kernel\Include\private\Re;E:\Project\webcad\kernel\Include\private\Gs;E:\Project\webcad\kernel\Include\private\Ed;E:\Project\webcad\kernel\Include\private\Ui;E:\Project\webcad\kernel\Include\private\Ut;E:\Project\webcad\kernel\Include\private\Ev;E:\Project\webcad\kernel\Include\private\Emscripten;E:\Project\webcad\kernel\Include\private\App;E:\Project\webcad\kernel\3rdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\Project\webcad\kernel\Include;E:\Project\webcad\kernel\Include\public;E:\Project\webcad\kernel\Include\public\Ac;E:\Project\webcad\kernel\Include\public\Ge;E:\Project\webcad\kernel\Include\public\Db;E:\Project\webcad\kernel\Include\public\Ap;E:\Project\webcad\kernel\Include\public\Gi;E:\Project\webcad\kernel\Include\public\Gs;E:\Project\webcad\kernel\Include\public\Rx;E:\Project\webcad\kernel\Include\public\Ed;E:\Project\webcad\kernel\Include\public\Pr;E:\Project\webcad\kernel\Include\public\Ui;E:\Project\webcad\kernel\Include\public\Ev;E:\Project\webcad\kernel\Include\public\Emscripten;E:\Project\webcad\kernel\Include\public\App;E:\Project\webcad\kernel\Include\private;E:\Project\webcad\kernel\Include\private\kernel;E:\Project\webcad\kernel\Include\private\Ac;E:\Project\webcad\kernel\Include\private\Ge;E:\Project\webcad\kernel\Include\private\Ap;E:\Project\webcad\kernel\Include\private\Rx;E:\Project\webcad\kernel\Include\private\Db;E:\Project\webcad\kernel\Include\private\Gi;E:\Project\webcad\kernel\Include\private\Re;E:\Project\webcad\kernel\Include\private\Gs;E:\Project\webcad\kernel\Include\private\Ed;E:\Project\webcad\kernel\Include\private\Ui;E:\Project\webcad\kernel\Include\private\Ut;E:\Project\webcad\kernel\Include\private\Ev;E:\Project\webcad\kernel\Include\private\Emscripten;E:\Project\webcad\kernel\Include\private\App;E:\Project\webcad\kernel\3rdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\Project\webcad\kernel\Include;E:\Project\webcad\kernel\Include\public;E:\Project\webcad\kernel\Include\public\Ac;E:\Project\webcad\kernel\Include\public\Ge;E:\Project\webcad\kernel\Include\public\Db;E:\Project\webcad\kernel\Include\public\Ap;E:\Project\webcad\kernel\Include\public\Gi;E:\Project\webcad\kernel\Include\public\Gs;E:\Project\webcad\kernel\Include\public\Rx;E:\Project\webcad\kernel\Include\public\Ed;E:\Project\webcad\kernel\Include\public\Pr;E:\Project\webcad\kernel\Include\public\Ui;E:\Project\webcad\kernel\Include\public\Ev;E:\Project\webcad\kernel\Include\public\Emscripten;E:\Project\webcad\kernel\Include\public\App;E:\Project\webcad\kernel\Include\private;E:\Project\webcad\kernel\Include\private\kernel;E:\Project\webcad\kernel\Include\private\Ac;E:\Project\webcad\kernel\Include\private\Ge;E:\Project\webcad\kernel\Include\private\Ap;E:\Project\webcad\kernel\Include\private\Rx;E:\Project\webcad\kernel\Include\private\Db;E:\Project\webcad\kernel\Include\private\Gi;E:\Project\webcad\kernel\Include\private\Re;E:\Project\webcad\kernel\Include\private\Gs;E:\Project\webcad\kernel\Include\private\Ed;E:\Project\webcad\kernel\Include\private\Ui;E:\Project\webcad\kernel\Include\private\Ut;E:\Project\webcad\kernel\Include\private\Ev;E:\Project\webcad\kernel\Include\private\Emscripten;E:\Project\webcad\kernel\Include\private\App;E:\Project\webcad\kernel\3rdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\Project\webcad\kernel\CMakeLists.txt">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">Building Custom Rule E:/Project/webcad/kernel/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SE:/Project/webcad/kernel -BE:/Project/webcad/kernel/build --check-stamp-file E:/Project/webcad/kernel/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCXXCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeRCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">E:\Project\webcad\kernel\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|win32'">Building Custom Rule E:/Project/webcad/kernel/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|win32'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SE:/Project/webcad/kernel -BE:/Project/webcad/kernel/build --check-stamp-file E:/Project/webcad/kernel/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|win32'">D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCXXCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeRCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|win32'">E:\Project\webcad\kernel\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">Building Custom Rule E:/Project/webcad/kernel/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SE:/Project/webcad/kernel -BE:/Project/webcad/kernel/build --check-stamp-file E:/Project/webcad/kernel/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCXXCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeRCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">E:\Project\webcad\kernel\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">Building Custom Rule E:/Project/webcad/kernel/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SE:/Project/webcad/kernel -BE:/Project/webcad/kernel/build --check-stamp-file E:/Project/webcad/kernel/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;D:\Program Files\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeCXXCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeRCCompiler.cmake;E:\Project\webcad\kernel\build\CMakeFiles\3.30.0-rc3\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">E:\Project\webcad\kernel\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\ZERO_CHECK.vcxproj">
+      <Project>{7B46C65C-8B70-3120-B8A2-4E0E9828D31A}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Ac.vcxproj">
+      <Project>{F7D0E95F-AD65-3B6A-BC8D-926B0B17552B}</Project>
+      <Name>Ac</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Ap.vcxproj">
+      <Project>{47D5E328-D061-326D-9DDA-2FB548955AF1}</Project>
+      <Name>Ap</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\App.vcxproj">
+      <Project>{E54D68B8-24ED-31B1-A814-3B0DF8377219}</Project>
+      <Name>App</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Db.vcxproj">
+      <Project>{40756944-0FCE-3689-9A39-42276B9EB1E4}</Project>
+      <Name>Db</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Ed.vcxproj">
+      <Project>{913A8955-2787-302C-BFF7-2C71B01268A4}</Project>
+      <Name>Ed</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Ev.vcxproj">
+      <Project>{3837C570-6B19-3C51-BBB8-AF053047D78C}</Project>
+      <Name>Ev</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Ge.vcxproj">
+      <Project>{B127CCDA-B92D-3922-AF62-9DF18CD279C4}</Project>
+      <Name>Ge</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Gi.vcxproj">
+      <Project>{EAE2D36B-1712-3E6E-A9E4-FE71E5C91A9E}</Project>
+      <Name>Gi</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Gs.vcxproj">
+      <Project>{095A0086-3397-356F-8469-793CE4E4B742}</Project>
+      <Name>Gs</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Kernel.vcxproj">
+      <Project>{574368A0-83F6-3515-A99C-F0CB51FE65A5}</Project>
+      <Name>Kernel</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Pr.vcxproj">
+      <Project>{645FA2EA-8549-3D50-B5E9-BE2535795FF8}</Project>
+      <Name>Pr</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Re.vcxproj">
+      <Project>{5277832A-B669-3F8C-8099-8F0BF16B6F22}</Project>
+      <Name>Re</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Rx.vcxproj">
+      <Project>{9CF6D0F8-A623-3B75-AEAA-D70626797FF0}</Project>
+      <Name>Rx</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\Ut.vcxproj">
+      <Project>{BD8792BE-AFD3-3FB7-8F87-D1AB6AC8E455}</Project>
+      <Name>Ut</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Project\webcad\kernel\build\main.vcxproj">
+      <Project>{6F631447-5EA2-3AAD-8CC8-77242A79B9AB}</Project>
+      <Name>main</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
