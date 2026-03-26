@@ -1,0 +1,19 @@
+<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg" class="icon">
+ <g>
+  <title>background</title>
+  <rect x="-1" y="-1" width="1026" height="1026" id="canvas_background" fill="none"/>
+ </g>
+
+ <g>
+  <title>Layer 1</title>
+  <ellipse fill="#ffd580" stroke-width="null" stroke-opacity="null" cx="511.99999" cy="512.00002" id="svg_3" rx="320" ry="320" stroke="null"/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="498" y="873.109376" width="24" height="104.999999" id="svg_4" stroke="null" rx="10"/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="208" y="753.109376" width="24" height="104.999999" id="svg_5" stroke="null" rx="10" transform="rotate(45 220.0000000000004,805.6093749999999) "/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="86" y="459.500001" width="24" height="104.999999" id="svg_7" stroke="null" rx="10" transform="rotate(90 97.9999999999999,512.0000000000001) "/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="500" y="47.109376" width="24" height="104.999999" id="svg_8" stroke="null" rx="10" transform="rotate(180 512,99.609375) "/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="915" y="459.500001" width="24" height="104.999999" id="svg_9" stroke="null" rx="10" transform="rotate(90 927,512.0000000000001) "/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="205" y="169.109376" width="24" height="104.999999" id="svg_10" stroke="null" rx="10" transform="rotate(135 217,221.609375) "/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="792" y="755.109376" width="24" height="104.999999" id="svg_11" stroke="null" rx="10" transform="rotate(-45 803.9999999999995,807.609375) "/>
+  <rect fill="#FFD580" stroke-width="null" stroke-opacity="null" fill-opacity="null" x="795" y="168.109376" width="24" height="104.999999" id="svg_12" stroke="null" rx="10" transform="rotate(45 807.0000000000001,220.6093749999999) "/>
+ </g>
+</svg>

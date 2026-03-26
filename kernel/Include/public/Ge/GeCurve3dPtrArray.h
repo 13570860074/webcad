@@ -21,7 +21,7 @@ public:
     ~GeCurve3dPtrArray() {}
 
 public:
-    ACARRAY_METHODS(GeCurve3d*);
+    ACARRAY_PTR_METHODS(GeCurve3d*);
 };
 #endif
 

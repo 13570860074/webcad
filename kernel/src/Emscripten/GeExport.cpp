@@ -113,8 +113,6 @@
         .function("paramOf", select_overload<double(const GePoint2d &, const GeTol &) const>(&CLASSNAME::paramOf))                                                             \
         .function("isClosed", select_overload<bool() const>(&CLASSNAME::isClosed))                                                                                             \
         .function("isClosed", select_overload<bool(const GeTol &) const>(&CLASSNAME::isClosed))                                                                                \
-        .function("getSplitCurves", &CLASSNAME::getSplitCurves, allow_raw_pointers())                                                                                          \
-        .function("explode", &CLASSNAME::explode)                                                                                                                              \
         .function("boundBlock", select_overload<GeBoundBlock2d() const>(&CLASSNAME::boundBlock))                                                                               \
         .function("boundBlock", select_overload<GeBoundBlock2d(const GeInterval &) const>(&CLASSNAME::boundBlock))                                                             \
         .function("orthoBoundBlock", select_overload<GeBoundBlock2d() const>(&CLASSNAME::orthoBoundBlock))                                                                     \
@@ -240,8 +238,6 @@
         .function("paramAtLength", select_overload<double(double, double, double) const>(&CLASSNAME::paramAtLength))                                                                                       \
         .function("area", select_overload<double() const>(&CLASSNAME::area))                                                                                                                               \
         .function("area", select_overload<double(const GeTol &) const>(&CLASSNAME::area))                                                                                                                  \
-        .function("getSplitCurves", &CLASSNAME::getSplitCurves, allow_raw_pointers())                                                                                                                      \
-        .function("explode", &CLASSNAME::explode)                                                                                                                                                          \
         .function("hasStartPoint", &CLASSNAME::hasStartPoint)                                                                                                                                              \
         .function("hasEndPoint", &CLASSNAME::hasEndPoint)                                                                                                                                                  \
         .function("evalPoint", &CLASSNAME::evalPoint)                                                                                                                                                      \
@@ -276,46 +272,65 @@
         .function("evalPoint", &CLASSNAME::evalPoint)
 
 // GePlanarEnt
-#define GEPLANARENT_EMSDK_EXPORT_METHODS(CLASSNAME)                                                                                                                     \
-    .function("intersectWith", select_overload<bool(const GeLine3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                                   \
-        .function("intersectWith", select_overload<bool(const GeLine3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                                \
-        .function("intersectWith", select_overload<bool(const GeLineSeg3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                            \
-        .function("intersectWith", select_overload<bool(const GeLineSeg3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                             \
-        .function("intersectWith", select_overload<bool(const GeRay3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                                \
-        .function("intersectWith", select_overload<bool(const GeRay3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                                 \
-        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLine3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                      \
-        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLine3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt))       \
-        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLineSeg3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                   \
-        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLineSeg3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt))    \
-        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeRay3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                       \
-        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeRay3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt))        \
-        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlane &, GePoint3d &) const>(&CLASSNAME::closestPointToPlanarEnt))                       \
-        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlane &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToPlanarEnt))        \
-        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GeBoundedPlane &, GePoint3d &) const>(&CLASSNAME::closestPointToPlanarEnt))                \
-        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GeBoundedPlane &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToPlanarEnt)) \
-        .function("isParallelTo", select_overload<bool(const GeLine3d &) const>(&CLASSNAME::isParallelTo))                                                              \
-        .function("isParallelTo", select_overload<bool(const GeLine3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                               \
-        .function("isParallelTo", select_overload<bool(const GeLineSeg3d &) const>(&CLASSNAME::isParallelTo))                                                           \
-        .function("isParallelTo", select_overload<bool(const GeLineSeg3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                            \
-        .function("isParallelTo", select_overload<bool(const GeRay3d &) const>(&CLASSNAME::isParallelTo))                                                               \
-        .function("isParallelTo", select_overload<bool(const GeRay3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                                \
-        .function("isParallelTo", select_overload<bool(const GePlane &) const>(&CLASSNAME::isParallelTo))                                                               \
-        .function("isParallelTo", select_overload<bool(const GePlane &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                                \
-        .function("isParallelTo", select_overload<bool(const GeBoundedPlane &) const>(&CLASSNAME::isParallelTo))                                                        \
-        .function("isParallelTo", select_overload<bool(const GeBoundedPlane &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                         \
-        .function("isPerpendicularTo", select_overload<bool(const GeLine3d &) const>(&CLASSNAME::isPerpendicularTo))                                                    \
-        .function("isPerpendicularTo", select_overload<bool(const GeLine3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                     \
-        .function("isPerpendicularTo", select_overload<bool(const GeLineSeg3d &) const>(&CLASSNAME::isPerpendicularTo))                                                 \
-        .function("isPerpendicularTo", select_overload<bool(const GeLineSeg3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                  \
-        .function("isPerpendicularTo", select_overload<bool(const GeRay3d &) const>(&CLASSNAME::isPerpendicularTo))                                                     \
-        .function("isPerpendicularTo", select_overload<bool(const GeRay3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                      \
-        .function("isPerpendicularTo", select_overload<bool(const GePlane &) const>(&CLASSNAME::isPerpendicularTo))                                                     \
-        .function("isPerpendicularTo", select_overload<bool(const GePlane &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                      \
-        .function("isPerpendicularTo", select_overload<bool(const GeBoundedPlane &) const>(&CLASSNAME::isPerpendicularTo))                                              \
-        .function("isPerpendicularTo", select_overload<bool(const GeBoundedPlane &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                               \
-        .function("isCoplanarTo", select_overload<bool(const GePlane &) const>(&CLASSNAME::isCoplanarTo))                                                               \
-        .function("isCoplanarTo", select_overload<bool(const GePlane &, const GeTol &) const>(&CLASSNAME::isCoplanarTo))                                                \
-        .function("isCoplanarTo", select_overload<bool(const GeBoundedPlane &) const>(&CLASSNAME::isCoplanarTo))                                                        \
+#define GEPLANARENT_EMSDK_EXPORT_METHODS(CLASSNAME)                                                                                                                    \
+    .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                             \
+        .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                          \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLinearEnt3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLinearEnt3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt)) \
+        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlanarEnt &, GePoint3d &) const>(&CLASSNAME::closestPointToPlanarEnt))                  \
+        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlanarEnt &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToPlanarEnt))  \
+        .function("isParallelTo", select_overload<bool(const GeLinearEnt3d &) const>(&CLASSNAME::isParallelTo))                                                        \
+        .function("isParallelTo", select_overload<bool(const GeLinearEnt3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                         \
+        .function("isParallelTo", select_overload<bool(const GePlanarEnt &) const>(&CLASSNAME::isParallelTo))                                                          \
+        .function("isParallelTo", select_overload<bool(const GePlanarEnt &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                           \
+        .function("isPerpendicularTo", select_overload<bool(const GeLinearEnt3d &) const>(&CLASSNAME::isPerpendicularTo))                                              \
+        .function("isPerpendicularTo", select_overload<bool(const GeLinearEnt3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                               \
+        .function("isPerpendicularTo", select_overload<bool(const GePlanarEnt &) const>(&CLASSNAME::isPerpendicularTo))                                                \
+        .function("isPerpendicularTo", select_overload<bool(const GePlanarEnt &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                 \
+        .function("isCoplanarTo", select_overload<bool(const GePlanarEnt &) const>(&CLASSNAME::isCoplanarTo))                                                          \
+        .function("isCoplanarTo", select_overload<bool(const GePlanarEnt &, const GeTol &) const>(&CLASSNAME::isCoplanarTo))
+
+// GePlane / GeBoundedPlane (uses concrete types from GEPLANARENT_METHODS)
+#define GEPLANE_EMSDK_EXPORT_METHODS(CLASSNAME)                                                                                                                               \
+    .function("intersectWith", select_overload<bool(const GeLine3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                                         \
+        .function("intersectWith", select_overload<bool(const GeLine3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                                      \
+        .function("intersectWith", select_overload<bool(const GeLineSeg3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                                  \
+        .function("intersectWith", select_overload<bool(const GeLineSeg3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                                   \
+        .function("intersectWith", select_overload<bool(const GeRay3d &, GePoint3d &) const>(&CLASSNAME::intersectWith))                                                      \
+        .function("intersectWith", select_overload<bool(const GeRay3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::intersectWith))                                       \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLine3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                            \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLine3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt))             \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLineSeg3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                         \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLineSeg3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt))          \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeRay3d &, GePoint3d &) const>(&CLASSNAME::closestPointToLinearEnt))                             \
+        .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeRay3d &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToLinearEnt))              \
+        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlane &, GePoint3d &) const>(&CLASSNAME::closestPointToPlanarEnt))                             \
+        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlane &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToPlanarEnt))              \
+        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GeBoundedPlane &, GePoint3d &) const>(&CLASSNAME::closestPointToPlanarEnt))                      \
+        .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GeBoundedPlane &, GePoint3d &, const GeTol &) const>(&CLASSNAME::closestPointToPlanarEnt))       \
+        .function("isParallelTo", select_overload<bool(const GeLine3d &) const>(&CLASSNAME::isParallelTo))                                                                    \
+        .function("isParallelTo", select_overload<bool(const GeLine3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                                     \
+        .function("isParallelTo", select_overload<bool(const GeLineSeg3d &) const>(&CLASSNAME::isParallelTo))                                                                 \
+        .function("isParallelTo", select_overload<bool(const GeLineSeg3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                                  \
+        .function("isParallelTo", select_overload<bool(const GeRay3d &) const>(&CLASSNAME::isParallelTo))                                                                     \
+        .function("isParallelTo", select_overload<bool(const GeRay3d &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                                      \
+        .function("isParallelTo", select_overload<bool(const GePlane &) const>(&CLASSNAME::isParallelTo))                                                                     \
+        .function("isParallelTo", select_overload<bool(const GePlane &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                                      \
+        .function("isParallelTo", select_overload<bool(const GeBoundedPlane &) const>(&CLASSNAME::isParallelTo))                                                              \
+        .function("isParallelTo", select_overload<bool(const GeBoundedPlane &, const GeTol &) const>(&CLASSNAME::isParallelTo))                                               \
+        .function("isPerpendicularTo", select_overload<bool(const GeLine3d &) const>(&CLASSNAME::isPerpendicularTo))                                                          \
+        .function("isPerpendicularTo", select_overload<bool(const GeLine3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                           \
+        .function("isPerpendicularTo", select_overload<bool(const GeLineSeg3d &) const>(&CLASSNAME::isPerpendicularTo))                                                       \
+        .function("isPerpendicularTo", select_overload<bool(const GeLineSeg3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                        \
+        .function("isPerpendicularTo", select_overload<bool(const GeRay3d &) const>(&CLASSNAME::isPerpendicularTo))                                                           \
+        .function("isPerpendicularTo", select_overload<bool(const GeRay3d &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                            \
+        .function("isPerpendicularTo", select_overload<bool(const GePlane &) const>(&CLASSNAME::isPerpendicularTo))                                                           \
+        .function("isPerpendicularTo", select_overload<bool(const GePlane &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                            \
+        .function("isPerpendicularTo", select_overload<bool(const GeBoundedPlane &) const>(&CLASSNAME::isPerpendicularTo))                                                    \
+        .function("isPerpendicularTo", select_overload<bool(const GeBoundedPlane &, const GeTol &) const>(&CLASSNAME::isPerpendicularTo))                                     \
+        .function("isCoplanarTo", select_overload<bool(const GePlane &) const>(&CLASSNAME::isCoplanarTo))                                                                     \
+        .function("isCoplanarTo", select_overload<bool(const GePlane &, const GeTol &) const>(&CLASSNAME::isCoplanarTo))                                                      \
+        .function("isCoplanarTo", select_overload<bool(const GeBoundedPlane &) const>(&CLASSNAME::isCoplanarTo))                                                              \
         .function("isCoplanarTo", select_overload<bool(const GeBoundedPlane &, const GeTol &) const>(&CLASSNAME::isCoplanarTo))
 
 EMSCRIPTEN_BINDINGS(Ge)
@@ -564,12 +579,12 @@ EMSCRIPTEN_BINDINGS(Ge)
     // GeCurve2dPtrArray
     emscripten::class_<GeCurve2dPtrArray>("GeCurve2dPtrArray")
         .constructor()
-            ACARRAY_EMSDK_EXPORT_METHODS(GeCurve2dPtrArray, GeCurve2d);
+            ACARRAY_PTR_EMSDK_EXPORT_METHODS(GeCurve2dPtrArray, GeCurve2d*);
 
     // GeCurve3dPtrArray
     emscripten::class_<GeCurve3dPtrArray>("GeCurve3dPtrArray")
         .constructor()
-            ACARRAY_EMSDK_EXPORT_METHODS(GeCurve3dPtrArray, GeCurve3d);
+            ACARRAY_PTR_EMSDK_EXPORT_METHODS(GeCurve3dPtrArray, GeCurve3d*);
 
     // GeLineSeg2dArray
     emscripten::class_<GeLineSeg2dArray>("GeLineSeg2dArray")
@@ -803,9 +818,9 @@ EMSCRIPTEN_BINDINGS(Ge)
                 GEPOINTENT2D_EMSDK_EXPORT_METHODS(GePointOnCurve2d)
         .function("curve", &GePointOnCurve2d::curve, allow_raw_pointers())
         .function("parameter", &GePointOnCurve2d::parameter)
-        .function("point", select_overload<GePoint2d()>(&GePointOnCurve2d::point))
-        .function("point", select_overload<GePoint2d(double)>(&GePointOnCurve2d::point))
-        .function("point", select_overload<GePoint2d(const GeCurve2d &, double)>(&GePointOnCurve2d::point))
+        .function("point", select_overload<GePoint2d() const>(&GePointOnCurve2d::point))
+        .function("point", select_overload<GePoint2d(double) const>(&GePointOnCurve2d::point))
+        .function("point", select_overload<GePoint2d(const GeCurve2d &, double) const>(&GePointOnCurve2d::point))
         .function("setCurve", &GePointOnCurve2d::setCurve, allow_raw_pointers())
         .function("setParameter", &GePointOnCurve2d::setParameter);
 
@@ -1108,7 +1123,7 @@ EMSCRIPTEN_BINDINGS(Ge)
         .class_property("kOrigin", &GePoint3d::kOrigin)
         .function("distanceTo", &GePoint3d::distanceTo)
         .function("setToProduct", &GePoint3d::setToProduct)
-        .function("transformBy", &GePoint3d::transformBy)
+        .function("transformBy", select_overload<GePoint3d &(const GeMatrix3d &)>(&GePoint3d::transformBy))
         .function("translation", &GePoint3d::translation)
         .function("rotateBy", select_overload<GePoint3d &(double, const GeVector3d &)>(&GePoint3d::rotateBy))
         .function("rotateBy", select_overload<GePoint3d &(double, const GeVector3d &, const GePoint3d &)>(&GePoint3d::rotateBy))
@@ -1164,9 +1179,9 @@ EMSCRIPTEN_BINDINGS(Ge)
                 GEPOINTENT3D_EMSDK_EXPORT_METHODS(GePointOnCurve3d)
         .function("curve", &GePointOnCurve3d::curve, allow_raw_pointers())
         .function("parameter", &GePointOnCurve3d::parameter)
-        .function("point", select_overload<GePoint3d()>(&GePointOnCurve3d::point))
-        .function("point", select_overload<GePoint3d(double)>(&GePointOnCurve3d::point))
-        .function("point", select_overload<GePoint3d(const GeCurve3d &, double)>(&GePointOnCurve3d::point))
+        .function("point", select_overload<GePoint3d() const>(&GePointOnCurve3d::point))
+        .function("point", select_overload<GePoint3d(double) const>(&GePointOnCurve3d::point))
+        .function("point", select_overload<GePoint3d(const GeCurve3d &, double) const>(&GePointOnCurve3d::point))
         .function("setCurve", &GePointOnCurve3d::setCurve, allow_raw_pointers())
         .function("setParameter", &GePointOnCurve3d::setParameter);
 
@@ -1175,13 +1190,13 @@ EMSCRIPTEN_BINDINGS(Ge)
         .constructor()
         .constructor<const GePointOnSurface &>()
         .constructor<const GeSurface &, const GePoint2d &>()
-            GEENTITY3D_EMSDK_EXPORT_METHODS(GePointOnCurve3d)
-                GEPOINTENT3D_EMSDK_EXPORT_METHODS(GePointOnCurve3d)
+            GEENTITY3D_EMSDK_EXPORT_METHODS(GePointOnSurface)
+                GEPOINTENT3D_EMSDK_EXPORT_METHODS(GePointOnSurface)
         .function("surface", &GePointOnSurface::surface, allow_raw_pointers())
         .function("parameter", &GePointOnSurface::parameter, allow_raw_pointers())
         .function("point", select_overload<GePoint3d() const>(&GePointOnSurface::point))
-        .function("point", select_overload<GePoint3d(const GePoint2d &)>(&GePointOnSurface::point))
-        .function("point", select_overload<GePoint3d(const GeSurface &, const GePoint2d &)>(&GePointOnSurface::point))
+        .function("point", select_overload<GePoint3d(const GePoint2d &) const>(&GePointOnSurface::point))
+        .function("point", select_overload<GePoint3d(const GeSurface &, const GePoint2d &) const>(&GePointOnSurface::point))
         .function("setSurface", &GePointOnSurface::setSurface, allow_raw_pointers())
         .function("setParameter", &GePointOnSurface::setParameter);
 
@@ -1211,8 +1226,6 @@ EMSCRIPTEN_BINDINGS(Ge)
         .function("closestPointToLinearEnt", select_overload<GePoint3d(const GeLinearEnt3d &, GePoint3d &, const GeTol &) const>(&GePlanarEnt::closestPointToLinearEnt))
         .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlanarEnt &, GePoint3d &) const>(&GePlanarEnt::closestPointToPlanarEnt))
         .function("closestPointToPlanarEnt", select_overload<GePoint3d(const GePlanarEnt &, GePoint3d &, const GeTol &) const>(&GePlanarEnt::closestPointToPlanarEnt))
-        .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &) const>(&GePlanarEnt::intersectWith))
-        .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &, const GeTol &) const>(&GePlanarEnt::intersectWith))
         .function("isParallelTo", select_overload<bool(const GeLinearEnt3d &) const>(&GePlanarEnt::isParallelTo))
         .function("isParallelTo", select_overload<bool(const GeLinearEnt3d &, const GeTol &) const>(&GePlanarEnt::isParallelTo))
         .function("isParallelTo", select_overload<bool(const GePlanarEnt &) const>(&GePlanarEnt::isParallelTo))
@@ -1223,7 +1236,8 @@ EMSCRIPTEN_BINDINGS(Ge)
         .function("isPerpendicularTo", select_overload<bool(const GePlanarEnt &, const GeTol &) const>(&GePlanarEnt::isPerpendicularTo))
         .function("isCoplanarTo", select_overload<bool(const GePlanarEnt &) const>(&GePlanarEnt::isCoplanarTo))
         .function("isCoplanarTo", select_overload<bool(const GePlanarEnt &, const GeTol &) const>(&GePlanarEnt::isCoplanarTo))
-        .function("get", &GePlanarEnt::get)
+        .function("get", select_overload<void(GePoint3d &, GeVector3d &, GeVector3d &) const>(&GePlanarEnt::get))
+        .function("get", select_overload<void(GePoint3d &, GePoint3d &, GePoint3d &) const>(&GePlanarEnt::get))
         .function("pointOnPlane", &GePlanarEnt::pointOnPlane)
         .function("normal", &GePlanarEnt::normal)
         .function("getCoordSystem", &GePlanarEnt::getCoordSystem);
@@ -1237,7 +1251,7 @@ EMSCRIPTEN_BINDINGS(Ge)
         .constructor<double, double, double, double>()
             GEENTITY3D_EMSDK_EXPORT_METHODS(GePlane)
                 GESURFACE_EMSDK_EXPORT_METHODS(GePlane)
-                    GEPLANARENT_EMSDK_EXPORT_METHODS(GePlane)
+                    GEPLANE_EMSDK_EXPORT_METHODS(GePlane)
         .function("signedDistanceTo", &GePlane::signedDistanceTo)
         .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &) const>(&GePlane::intersectWith))
         .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &, const GeTol &) const>(&GePlane::intersectWith))
@@ -1255,9 +1269,9 @@ EMSCRIPTEN_BINDINGS(Ge)
         .constructor()
         .constructor<const GeBoundedPlane &>()
         .constructor<const GePoint3d &, const GePoint3d &, const GePoint3d &>()
-            GEENTITY3D_EMSDK_EXPORT_METHODS(GePlane)
-                GESURFACE_EMSDK_EXPORT_METHODS(GePlane)
-                    GEPLANARENT_EMSDK_EXPORT_METHODS(GePlane)
+            GEENTITY3D_EMSDK_EXPORT_METHODS(GeBoundedPlane)
+                GESURFACE_EMSDK_EXPORT_METHODS(GeBoundedPlane)
+                    GEPLANE_EMSDK_EXPORT_METHODS(GeBoundedPlane)
         .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &) const>(&GeBoundedPlane::intersectWith))
         .function("intersectWith", select_overload<bool(const GeLinearEnt3d &, GePoint3d &, const GeTol &) const>(&GeBoundedPlane::intersectWith))
         .function("intersectWith", select_overload<bool(const GePlane &, GeLineSeg3d &) const>(&GeBoundedPlane::intersectWith))
@@ -1269,8 +1283,6 @@ EMSCRIPTEN_BINDINGS(Ge)
 
     // GeCurve3d
     emscripten::class_<GeCurve3d, base<GeEntity3d>>("GeCurve3d")
-        .function("distanceTo", select_overload<double(const GePoint3d &) const>(&GeCurve3d::distanceTo))
-        .function("distanceTo", select_overload<double(const GePoint3d &, const GeTol &) const>(&GeCurve3d::distanceTo))
         .function("distanceTo", select_overload<double(const GePoint3d &) const>(&GeCurve3d::distanceTo))
         .function("distanceTo", select_overload<double(const GePoint3d &, const GeTol &) const>(&GeCurve3d::distanceTo))
         .function("closestPointTo", select_overload<GePoint3d(const GePoint3d &) const>(&GeCurve3d::closestPointTo))
@@ -1320,8 +1332,6 @@ EMSCRIPTEN_BINDINGS(Ge)
         .function("paramAtLength", select_overload<double(double, double, double) const>(&GeCurve3d::paramAtLength))
         .function("area", select_overload<double() const>(&GeCurve3d::area))
         .function("area", select_overload<double(const GeTol &) const>(&GeCurve3d::area))
-        .function("getSplitCurves", &GeCurve3d::getSplitCurves, allow_raw_pointers())
-        .function("explode", &GeCurve3d::explode)
         .function("hasStartPoint", &GeCurve3d::hasStartPoint)
         .function("hasEndPoint", &GeCurve3d::hasEndPoint)
         .function("evalPoint", &GeCurve3d::evalPoint)

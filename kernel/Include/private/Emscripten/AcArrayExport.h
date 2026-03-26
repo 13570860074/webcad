@@ -7,7 +7,7 @@
 
 
 #define ACARRAY_PTR_EMSDK_EXPORT_METHODS(CLASSNAME,BASECLASS)\
-    .function("at",select_overload<BASECLASS&(unsigned int)>(&CLASSNAME::at), allow_raw_pointers())\
+    .function("at", optional_override([](CLASSNAME& self, unsigned int i) -> BASECLASS { return self.at(i); }), allow_raw_pointers())\
     .function("length", &CLASSNAME::length)\
     .function("remove", &CLASSNAME::remove, allow_raw_pointers())\
     .function("append", &CLASSNAME::append, allow_raw_pointers())\

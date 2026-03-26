@@ -1,0 +1,20 @@
+{
+  "name": "webcad",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.167.1",
+    "vue": "^3.4.35"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "@vitejs/plugin-vue": "^5.1.2",
+    "vite": "^5.3.5",
+    "vue-tsc": "^2.0.29"
+  }
+}

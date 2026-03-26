@@ -22,7 +22,7 @@ public:
     ~GeCurve2dPtrArray() {}
 
 public:
-    ACARRAY_METHODS(GeCurve2d*);
+    ACARRAY_PTR_METHODS(GeCurve2d*);
 };
 #endif
 
