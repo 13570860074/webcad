@@ -8,6 +8,9 @@
 #include "GeVector3d.h"
 #include "GeMatrix3d.h"
 
+class GiDrawable;
+class GeEllipArc3d;
+
 
 
 typedef enum {
@@ -133,6 +136,25 @@ public:
 
     virtual Adesk::Boolean  ray(const GePoint3d&,
         const GePoint3d&) const = 0;
+
+    // 多边形 (填充)
+    virtual Adesk::Boolean  polygon(const Adesk::UInt32 nbPoints,
+        const GePoint3d* pVertexList) const = 0;
+
+    // 椭圆弧
+    virtual bool  ellipArc(const GeEllipArc3d& ellipArc,
+        const GiArcType arcType = kGiArcSimple) const = 0;
+
+    // 网格 (rows x columns)
+    virtual Adesk::Boolean  mesh(const Adesk::UInt32 rows,
+        const Adesk::UInt32 columns,
+        const GePoint3d* pVertexList,
+        const GiEdgeData* pEdgeData = NULL,
+        const GiFaceData* pFaceData = NULL,
+        const GiVertexData* pVertexData = NULL) const = 0;
+
+    // 嵌套绘制
+    virtual void draw(const GiDrawable* pDrawable) const = 0;
 
     // If you push a clip boundary onto the stack you must pop it;
 //

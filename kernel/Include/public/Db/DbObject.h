@@ -94,10 +94,13 @@ public:
 
     virtual GiDrawable* drawable();
 
+    // GiDrawable NVI重写
     virtual unsigned int subSetAttributes(GiDrawableTraits* pTraits) const;
     virtual bool subWorldDraw(GiWorldDraw* pWd) const;
     virtual void subViewportDraw(GiViewportDraw* pVd) const;
-  
+    virtual bool isPersistent() const { return true; }
+    virtual DbObjectId id() const { return objectId(); }
+
     void setGsNode(GsCache* pNode);
     GsCache* gsNode() const;
 };

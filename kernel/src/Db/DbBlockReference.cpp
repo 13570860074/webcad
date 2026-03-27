@@ -204,10 +204,42 @@ Acad::ErrorStatus DbBlockReference::dwgOutFields(DbDwgFiler *pFiler) const
 }
 bool DbBlockReference::subWorldDraw(GiWorldDraw *pWd) const
 {
-	bool isError = true;
+	// 获取块表记录
+	DbObjectId blockId = this->blockTableRecord();
+	if (blockId.isNull()) {
+		return true;
+	}
 
+	DbBlockTableRecord* pBlock = NULL;
+	if (::acdbOpenObject(pBlock, blockId, Db::kForRead) != Acad::eOk || pBlock == NULL) {
+		return true;
+	}
 
-	return isError;
+	// 压入块变换矩阵
+	GeMatrix3d xform = this->blockTransform();
+	pWd->geometry().pushModelTransform(xform);
+
+	// 遍历块表记录中的所有实体
+	DbBlockTableRecordIterator* pIter = NULL;
+	pBlock->newIterator(pIter);
+	if (pIter != NULL) {
+		for (pIter->start(); !pIter->done(); pIter->step()) {
+			DbEntity* pEntity = NULL;
+			pIter->getEntity(pEntity);
+			if (pEntity != NULL) {
+				// 嵌套绘制子实体
+				pEntity->subWorldDraw(pWd);
+				pEntity->close();
+			}
+		}
+		delete pIter;
+	}
+
+	// 弹出块变换矩阵
+	pWd->geometry().popModelTransform();
+
+	pBlock->close();
+	return true;
 }
 
 

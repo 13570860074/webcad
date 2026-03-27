@@ -102,6 +102,15 @@ public:
 
     virtual Adesk::Boolean xline(const GePoint3d &, const GePoint3d &) const;
     virtual Adesk::Boolean ray(const GePoint3d &, const GePoint3d &) const;
+
+    virtual Adesk::Boolean polygon(const Adesk::UInt32 nbPoints, const GePoint3d *pVertexList) const;
+    virtual bool ellipArc(const GeEllipArc3d &ellipArc, const GiArcType arcType = kGiArcSimple) const;
+    virtual Adesk::Boolean mesh(const Adesk::UInt32 rows, const Adesk::UInt32 columns,
+                                const GePoint3d *pVertexList,
+                                const GiEdgeData *pEdgeData = NULL,
+                                const GiFaceData *pFaceData = NULL,
+                                const GiVertexData *pVertexData = NULL) const;
+    virtual void draw(const GiDrawable *pDrawable) const;
 };
 
 #endif

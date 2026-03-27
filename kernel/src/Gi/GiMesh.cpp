@@ -55,7 +55,6 @@ void GiMesh::update() {
         GI_IMP_MESH(this->m_pImpl)->vertexs[GI_IMP_MESH(this->m_pImpl)->vertexLength++] = pTriangleMeshGeometry->vertex(2).y;
         GI_IMP_MESH(this->m_pImpl)->vertexs[GI_IMP_MESH(this->m_pImpl)->vertexLength++] = pTriangleMeshGeometry->vertex(2).z;
     }
-    std::cout << "vertexLength:" << GI_IMP_MESH(this->m_pImpl)->vertexLength << std::endl;
 }
 
 #if EMSDK

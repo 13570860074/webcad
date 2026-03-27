@@ -532,6 +532,7 @@ public:
 
 	AcArray<GiWorldGeometryStake*> worldGeometryStakes;
 	GiEntityTraits* pEntityTraits;
+	AcArray<GeMatrix3d> modelTransformStack;
 };
 class GiWorldDrawGeometryImpl : public GiWorldGeometryImpl
 {

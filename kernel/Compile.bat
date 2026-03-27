@@ -1,4 +1,4 @@
-cd /d E:\Project\webcad\Project\kernel_app\wasm
+cd /d E:\Project\webcad\kernel\build\wasm
 del main.js
 del main.wasm
 emmake make -j24

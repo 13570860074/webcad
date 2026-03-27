@@ -1,6 +1,9 @@
 #include "DbEllipse.h"
 #include "GePlane.h"
 #include "DbImpl.h"
+#include "GiWorldDraw.h"
+#include "GiWorldGeometry.h"
+#include "GeEllipArc3d.h"
 
 
 DbEllipse::DbEllipse() {
@@ -76,7 +79,20 @@ Acad::ErrorStatus DbEllipse::dwgOutFields(DbDwgFiler* pFiler) const {
 	return Acad::ErrorStatus::eOk;
 }
 bool DbEllipse::subWorldDraw(GiWorldDraw* pWd) const {
-	return false;
+
+	// 构造椭圆弧几何体
+	GeVector3d major = this->majorAxis();
+	double majorR = this->majorRadius();
+	double minorR = this->minorRadius();
+	GeVector3d unitNormal = this->normal();
+
+	GeEllipArc3d arc;
+	arc.set(this->center(), unitNormal, major, majorR, minorR, this->startAngle(), this->endAngle());
+
+	// 绘制椭圆弧
+	pWd->geometry().ellipArc(arc);
+
+	return true;
 }
 
 

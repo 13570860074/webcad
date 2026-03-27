@@ -349,39 +349,31 @@ GiEntityIterator* GiEntityManager::newIterator()const {
 }
 GiEntity* GiEntityManager::queryEntity(const Gi::EntityType type, const Gi::ElementType element, const GiMaterial* material) {
 
-	for (int i = 0;i < GI_IMP_ENTITYMANAGER(this->m_pImpl)->entitys.length();i++) {
-		if (GI_IMP_ENTITYMANAGER(this->m_pImpl)->entitys[i]->type() == type &&
-			GI_IMP_ENTITYMANAGER(this->m_pImpl)->entitys[i]->element() == element &&
-			GI_IMP_ENTITYMANAGER(this->m_pImpl)->entitys[i]->material() == material) {
-			return GI_IMP_ENTITYMANAGER(this->m_pImpl)->entitys[i];
-		}
-	}
-	return NULL;
-
-
 	// 获得类型索引
-	GiEntityIndexPointerType* entityIndexPointerType = GI_IMP_ENTITYMANAGER(this->m_pImpl)->entityIndexs->at(type - Gi::EntityType::kUnknownEntity - 1);
+	int typeIndex = type - Gi::EntityType::kUnknownEntity - 1;
+	if (typeIndex < 0 || typeIndex >= GI_IMP_ENTITYMANAGER(this->m_pImpl)->entityIndexs->length()) {
+		return NULL;
+	}
+	GiEntityIndexPointerType* entityIndexPointerType = GI_IMP_ENTITYMANAGER(this->m_pImpl)->entityIndexs->at(typeIndex);
 
 	// 获得元素索引
-	GiEntityIndexPointerElement* entityIndexPointerElement = entityIndexPointerType->at(element - Gi::ElementType::kUnknownElement - 1);
+	int elementIndex = element - Gi::ElementType::kUnknownElement - 1;
+	if (elementIndex < 0 || elementIndex >= entityIndexPointerType->length()) {
+		return NULL;
+	}
+	GiEntityIndexPointerElement* entityIndexPointerElement = entityIndexPointerType->at(elementIndex);
 
 	// 获得材质索引
 	int materialId = material->objectId().asOldId();
-	GiEntityIndexPointerMaterial* entityIndexPointerMaterial = NULL;
-	if (entityIndexPointerElement->length() > materialId - 1) {
-		entityIndexPointerMaterial = entityIndexPointerElement->at(materialId - 1);
+	if (materialId <= 0 || materialId - 1 >= entityIndexPointerElement->length()) {
+		return NULL;
 	}
+	GiEntityIndexPointerMaterial* entityIndexPointerMaterial = entityIndexPointerElement->at(materialId - 1);
 	if (entityIndexPointerMaterial == NULL) {
 		return NULL;
 	}
 
-	if (element == Gi::ElementType::kDragging) {
-		if (entityIndexPointerMaterial->entitys.length() > 0) {
-			return entityIndexPointerMaterial->entitys[0];
-		}
-		return NULL;
-	}
-	else if (element == Gi::ElementType::kHighlight) {
+	if (element == Gi::ElementType::kDragging || element == Gi::ElementType::kHighlight) {
 		if (entityIndexPointerMaterial->entitys.length() > 0) {
 			return entityIndexPointerMaterial->entitys[0];
 		}

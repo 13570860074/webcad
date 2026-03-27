@@ -89,7 +89,6 @@ void GiEntityTraits::setEntity(DbEntity* pEntity) {
     else {
         this->setLineWeight(pEntity->lineWeight());
     }
-    this->setLineWeight(Db::LineWeight::kLnWt000);
 
     // 设置线型
     if (pLayerTableRecord != NULL && pEntity->linetype() == "ByLayer") {

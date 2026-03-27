@@ -168,6 +168,7 @@ add_library(
 	src/Ge/GePlane.cpp
 	src/Ge/GeBoundedPlane.cpp
 	src/Ge/GeEllipArc2d.cpp
+	src/Ge/GeEllipArc3d.cpp
 	src/Ge/GeCubicSplineCurve2d.cpp
 	src/Ge/GeCubicSplineCurve3d.cpp
 	src/Ge/GeExtents2d.cpp
@@ -431,6 +432,8 @@ add_library(
 	src/Gi/GiWorldDrawGeometry.cpp
 	src/Gi/GiCommonDraw.cpp
 	src/Gi/GiWorldDraw.cpp
+	src/Gi/GiViewportDraw.cpp
+	src/Gi/GiViewportGeometry.cpp
 	src/Gi/GiEntDraw.cpp
 	src/Gi/GiWorldDrawManager.cpp
 	src/Gi/GiEntityHighlander.cpp

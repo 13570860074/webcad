@@ -13,7 +13,6 @@
 #include "GiImpl.h"
 #include "DbImpl.h"
 
-int bbbbb = 0;
 GiGeometryExtentManager::GiGeometryExtentManager() {
 	this->m_pImpl = new GiGeometryExtentManagerImpl();
 }
