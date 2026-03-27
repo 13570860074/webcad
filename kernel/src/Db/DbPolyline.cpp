@@ -7,8 +7,11 @@
 #include "GeCircArc3d.h"
 #include "GiWorldDraw.h"
 #include "GiWorldGeometry.h"
+#include "DbLine.h"
 #include "DbOsnapPointCompute.h"
+#include "DbExtents.h"
 #include "DbImpl.h"
+#include <cmath>
 
 // 多段线顶点和各参数的关系
 /*
@@ -643,6 +646,58 @@ void DbPolyline::getEcs(GeMatrix3d& retVal) const
 
 Acad::ErrorStatus DbPolyline::subGetGeomExtents(DbExtents &extents) const
 {
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d elevVec = this->normal() * this->elevation();
+
+	for (int i = 0; i < this->numVerts(); i++)
+	{
+		GePoint2d pt2d;
+		this->getPointAt(i, pt2d);
+		GePoint3d pt(pt2d.x, pt2d.y, 0.0);
+		pt.transformBy(mat);
+		pt += elevVec;
+		extents.addPoint(pt);
+
+		// 弧段需要采样中点
+		if (i < this->numVerts() - 1 || this->isClosed())
+		{
+			double bulge = 0.0;
+			this->getBulgeAt(i, bulge);
+			if (fabs(bulge) > 1e-10)
+			{
+				int nextIdx = (i + 1) % this->numVerts();
+				GePoint2d pt2d2;
+				this->getPointAt(nextIdx, pt2d2);
+				GeCircArc2d arc;
+				arc.set(pt2d, pt2d2, bulge);
+				// 采样弧上8个点
+				for (int j = 1; j < 8; j++)
+				{
+					double t = j / 8.0;
+					GePoint2d arcPt = pt2d + (pt2d2 - pt2d) * t; // 近似
+					// 弧中点核心采样
+					GePoint2d mid2d;
+					mid2d.x = (pt2d.x + pt2d2.x) * 0.5;
+					mid2d.y = (pt2d.y + pt2d2.y) * 0.5;
+					GeVector2d chordDir = pt2d2 - pt2d;
+					double chordLen = chordDir.length();
+					if (chordLen > 1e-10)
+					{
+						double sagitta = fabs(bulge) * chordLen * 0.5;
+						GeVector2d perpDir(-chordDir.y, chordDir.x);
+						perpDir.normalize();
+						if (bulge < 0) perpDir = perpDir.negate();
+						GePoint2d sagPt = mid2d + perpDir * sagitta;
+						GePoint3d pt3(sagPt.x, sagPt.y, 0.0);
+						pt3.transformBy(mat);
+						pt3 += elevVec;
+						extents.addPoint(pt3);
+					}
+				}
+			}
+		}
+	}
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::subTransformBy(const GeMatrix3d& xform)
@@ -1080,54 +1135,253 @@ Acad::ErrorStatus DbPolyline::getPointAtParam(double param, GePoint3d& pt) const
 	}
 	else if (this->segType(index) == DbPolyline::SegType::kArc)
 	{
-
 		double bulge = 0.0;
 		this->getBulgeAt(index, bulge);
 		GeCircArc2d circArc;
 		circArc.set(vertex1, vertex2, bulge);
-		// circArc.evalPoint();
+		double sa = circArc.startAng();
+		double ea = circArc.endAng();
+		double frac = param - int(param);
+		double ang = sa + (ea - sa) * frac;
+		GePoint2d cen = circArc.center();
+		double r = circArc.radius();
+		GePoint2d vertex(cen.x + r * cos(ang), cen.y + r * sin(ang));
+
+		pt = GePoint3d(vertex.x, vertex.y, 0.0);
+		pt.transformBy(mat);
+		pt += (this->normal() * this->elevation());
 	}
 
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getParamAtPoint(const GePoint3d& point, double& param) const
 {
+	// 将3D点转到ECS 2D
+	GeMatrix3d matW2E;
+	matW2E.setToWorldToPlane(this->normal());
+	GePoint3d ptLocal = point;
+	ptLocal -= (this->normal() * this->elevation());
+	ptLocal.transformBy(matW2E);
+	GePoint2d pt2d(ptLocal.x, ptLocal.y);
 
+	int numSeg = DB_IMP_POLYLINE(this->m_pImpl)->numSegments();
+	double bestDist = 1e30;
+	double bestParam = 0.0;
+
+	for (int i = 0; i < numSeg; i++) {
+		GePoint2d v1 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[i];
+		int nextIdx = (i + 1 < this->numVerts()) ? i + 1 : 0;
+		GePoint2d v2 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[nextIdx];
+		double bulge = 0.0;
+		this->getBulgeAt(i, bulge);
+
+		if (fabs(bulge) < 0.0002) {
+			// 直线段
+			GeVector2d dir = v2 - v1;
+			double len = dir.length();
+			if (len < 1e-14) continue;
+			double t = (pt2d - v1).dotProduct(dir) / (len * len);
+			if (t < 0.0) t = 0.0;
+			if (t > 1.0) t = 1.0;
+			GePoint2d proj = v1 + dir * t;
+			double d = (pt2d - proj).length();
+			if (d < bestDist) {
+				bestDist = d;
+				bestParam = i + t;
+			}
+		} else {
+			// 圆弧段
+			GeCircArc2d arc;
+			arc.set(v1, v2, bulge);
+			GePoint2d cen = arc.center();
+			double r = arc.radius();
+			double sa = arc.startAng();
+			double ea = arc.endAng();
+			GeVector2d toP = pt2d - cen;
+			double ang = atan2(toP.y, toP.x);
+			// 归一化角度范围
+			double totalAng = ea - sa;
+			double relAng = ang - sa;
+			relAng = fmod(relAng, 2.0 * PI);
+			if (relAng < 0) relAng += 2.0 * PI;
+			if (totalAng < 0) {
+				relAng = fmod(-(ang - sa), 2.0 * PI);
+				if (relAng < 0) relAng += 2.0 * PI;
+				totalAng = -totalAng;
+			}
+			double t = relAng / totalAng;
+			if (t < 0.0) t = 0.0;
+			if (t > 1.0) t = 1.0;
+			double projAng = sa + (ea - sa) * t;
+			GePoint2d proj(cen.x + r * cos(projAng), cen.y + r * sin(projAng));
+			double d = (pt2d - proj).length();
+			if (d < bestDist) {
+				bestDist = d;
+				bestParam = i + t;
+			}
+		}
+	}
+	param = bestParam;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getDistAtParam(double param, double& dist) const
 {
-	dist = abs(param);
+	int numSeg = DB_IMP_POLYLINE(this->m_pImpl)->numSegments();
+	dist = 0.0;
+	int fullSegs = (int)param;
+	double frac = param - fullSegs;
+
+	for (int i = 0; i < numSeg && i <= fullSegs; i++) {
+		GePoint2d v1 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[i];
+		int nextIdx = (i + 1 < this->numVerts()) ? i + 1 : 0;
+		GePoint2d v2 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[nextIdx];
+		double bulge = 0.0;
+		this->getBulgeAt(i, bulge);
+		double segLen;
+		if (fabs(bulge) < 0.0002) {
+			segLen = (v2 - v1).length();
+		} else {
+			double theta = 4.0 * atan(fabs(bulge));
+			double chord = (v2 - v1).length();
+			double r = chord / (2.0 * sin(theta / 2.0));
+			segLen = r * theta;
+		}
+		if (i < fullSegs) {
+			dist += segLen;
+		} else {
+			dist += segLen * frac;
+		}
+	}
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getParamAtDist(double dist, double& param) const
 {
-	param = dist;
+	int numSeg = DB_IMP_POLYLINE(this->m_pImpl)->numSegments();
+	double accumulated = 0.0;
+	for (int i = 0; i < numSeg; i++) {
+		GePoint2d v1 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[i];
+		int nextIdx = (i + 1 < this->numVerts()) ? i + 1 : 0;
+		GePoint2d v2 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[nextIdx];
+		double bulge = 0.0;
+		this->getBulgeAt(i, bulge);
+		double segLen;
+		if (fabs(bulge) < 0.0002) {
+			segLen = (v2 - v1).length();
+		} else {
+			double theta = 4.0 * atan(fabs(bulge));
+			double chord = (v2 - v1).length();
+			double r = chord / (2.0 * sin(theta / 2.0));
+			segLen = r * theta;
+		}
+		if (accumulated + segLen >= dist) {
+			double remain = dist - accumulated;
+			param = i + (segLen > 1e-14 ? remain / segLen : 0.0);
+			return Acad::ErrorStatus::eOk;
+		}
+		accumulated += segLen;
+	}
+	param = (double)numSeg;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getDistAtPoint(const GePoint3d& point, double& dist) const
 {
-	return Acad::ErrorStatus::eOk;
+	double param;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::eOk) return es;
+	return this->getDistAtParam(param, dist);
 }
 Acad::ErrorStatus DbPolyline::getPointAtDist(double dist, GePoint3d& point) const
 {
+	double param;
+	Acad::ErrorStatus es = this->getParamAtDist(dist, param);
+	if (es != Acad::eOk) return es;
+	return this->getPointAtParam(param, point);
+}
+Acad::ErrorStatus DbPolyline::getFirstDeriv(double param, GeVector3d& firstDeriv) const
+{
+	int numSeg = DB_IMP_POLYLINE(this->m_pImpl)->numSegments();
+	int seg = (int)param;
+	if (seg >= numSeg) seg = numSeg - 1;
+	if (seg < 0) return Acad::ErrorStatus::eFail;
+
+	GePoint2d v1 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[seg];
+	int nextIdx = (seg + 1 < this->numVerts()) ? seg + 1 : 0;
+	GePoint2d v2 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[nextIdx];
+	double bulge = 0.0;
+	this->getBulgeAt(seg, bulge);
+
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+
+	if (fabs(bulge) < 0.0002) {
+		GeVector2d dir = v2 - v1;
+		firstDeriv = GeVector3d(dir.x, dir.y, 0.0);
+		firstDeriv.transformBy(mat);
+	} else {
+		GeCircArc2d arc;
+		arc.set(v1, v2, bulge);
+		GePoint2d cen = arc.center();
+		double r = arc.radius();
+		double sa = arc.startAng();
+		double ea = arc.endAng();
+		double frac = param - seg;
+		double ang = sa + (ea - sa) * frac;
+		// 切线方向是radius方向旋转90度
+		double dir = (bulge > 0) ? 1.0 : -1.0;
+		GeVector2d tan(-sin(ang) * dir, cos(ang) * dir);
+		double speed = r * fabs(ea - sa);
+		firstDeriv = GeVector3d(tan.x * speed, tan.y * speed, 0.0);
+		firstDeriv.transformBy(mat);
+	}
 	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbPolyline::getFirstDeriv(double, GeVector3d&) const
+Acad::ErrorStatus DbPolyline::getFirstDeriv(const GePoint3d& point, GeVector3d& firstDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	double param;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::eOk) return es;
+	return this->getFirstDeriv(param, firstDeriv);
 }
-Acad::ErrorStatus DbPolyline::getFirstDeriv(const GePoint3d&, GeVector3d&) const
+Acad::ErrorStatus DbPolyline::getSecondDeriv(double param, GeVector3d& secDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	int numSeg = DB_IMP_POLYLINE(this->m_pImpl)->numSegments();
+	int seg = (int)param;
+	if (seg >= numSeg) seg = numSeg - 1;
+	if (seg < 0) return Acad::ErrorStatus::eFail;
+
+	double bulge = 0.0;
+	this->getBulgeAt(seg, bulge);
+
+	if (fabs(bulge) < 0.0002) {
+		// 直线的二阶导为零
+		secDeriv = GeVector3d(0, 0, 0);
+	} else {
+		GePoint2d v1 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[seg];
+		int nextIdx = (seg + 1 < this->numVerts()) ? seg + 1 : 0;
+		GePoint2d v2 = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[nextIdx];
+		GeCircArc2d arc;
+		arc.set(v1, v2, bulge);
+		GePoint2d cen = arc.center();
+		double r = arc.radius();
+		double sa = arc.startAng();
+		double ea = arc.endAng();
+		double frac = param - seg;
+		double ang = sa + (ea - sa) * frac;
+		double omega = ea - sa;
+		// 二阶导 = -r*omega^2 * (cos(ang), sin(ang))
+		GeMatrix3d mat;
+		mat.setToPlaneToWorld(this->normal());
+		secDeriv = GeVector3d(-cos(ang) * r * omega * omega, -sin(ang) * r * omega * omega, 0.0);
+		secDeriv.transformBy(mat);
+	}
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbPolyline::getSecondDeriv(double, GeVector3d&) const
+Acad::ErrorStatus DbPolyline::getSecondDeriv(const GePoint3d& point, GeVector3d& secDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
-}
-Acad::ErrorStatus DbPolyline::getSecondDeriv(const GePoint3d&, GeVector3d&) const
-{
-	return Acad::ErrorStatus::eFail;
+	double param;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::eOk) return es;
+	return this->getSecondDeriv(param, secDeriv);
 }
 Acad::ErrorStatus DbPolyline::getClosestPointTo(const GePoint3d& point, GePoint3d& closest, bool) const
 {
@@ -1209,6 +1463,22 @@ Acad::ErrorStatus DbPolyline::getOrthoProjectedCurve(const GePlane& plane, DbCur
 }
 Acad::ErrorStatus DbPolyline::getProjectedCurve(const GePlane& plane, const GeVector3d& normal, DbCurve*& curve) const
 {
+	int n = this->numVerts();
+	if (n < 2) return Acad::ErrorStatus::eFail;
+
+	DbPolyline* pPline = new DbPolyline();
+	for (int i = 0; i < n; i++)
+	{
+		GePoint3d pt3d;
+		this->getPointAt(i, pt3d);
+		pt3d = pt3d.project(plane, normal);
+		double bulge = 0.0;
+		this->getBulgeAt(i, bulge);
+		pPline->addVertexAt(i, GePoint2d(pt3d.x, pt3d.y), bulge);
+	}
+	if (this->isClosed())
+		pPline->setClosed(true);
+	curve = pPline;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getOffsetCurves(double v, DbVoidPtrArray& curves) const
@@ -1220,30 +1490,176 @@ Acad::ErrorStatus DbPolyline::getSpline(DbSpline*&) const
 {
 	return Acad::ErrorStatus::eFail;
 }
-Acad::ErrorStatus DbPolyline::getSplitCurves(const GeDoubleArray&, DbVoidPtrArray& curveSegments) const
+Acad::ErrorStatus DbPolyline::getSplitCurves(const GeDoubleArray& params, DbVoidPtrArray& curveSegments) const
 {
-	return Acad::ErrorStatus::eFail;
+	if (params.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+
+	// 排序参数
+	GeDoubleArray sortedParams;
+	for (int i = 0; i < params.length(); i++)
+		sortedParams.append(params[i]);
+	for (int i = 0; i < sortedParams.length() - 1; i++)
+		for (int j = i + 1; j < sortedParams.length(); j++)
+			if (sortedParams[i] > sortedParams[j])
+			{
+				double t = sortedParams[i];
+				sortedParams[i] = sortedParams[j];
+				sortedParams[j] = t;
+			}
+
+	// 收集所有分割点(包含起终点)
+	GePoint3dArray allPts;
+	double startP = 0.0, endP = 0.0;
+	this->getStartParam(startP);
+	this->getEndParam(endP);
+
+	GeDoubleArray allParams;
+	allParams.append(startP);
+	for (int i = 0; i < sortedParams.length(); i++)
+		allParams.append(sortedParams[i]);
+	allParams.append(endP);
+
+	for (int seg = 0; seg < allParams.length() - 1; seg++)
+	{
+		double sp = allParams[seg];
+		double ep = allParams[seg + 1];
+		// 创建简单线段多段线
+		GePoint3d p1, p2;
+		this->getPointAtParam(sp, p1);
+		this->getPointAtParam(ep, p2);
+		DbLine* line = new DbLine();
+		line->setStartPoint(p1);
+		line->setEndPoint(p2);
+		curveSegments.append(line);
+	}
+
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbPolyline::getSplitCurves(const GePoint3dArray&, DbVoidPtrArray&) const
+Acad::ErrorStatus DbPolyline::getSplitCurves(const GePoint3dArray& points, DbVoidPtrArray& curveSegments) const
 {
-	return Acad::ErrorStatus::eFail;
+	if (points.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+	GeDoubleArray params;
+	for (int i = 0; i < points.length(); i++)
+	{
+		double p;
+		this->getParamAtPoint(points[i], p);
+		params.append(p);
+	}
+	return this->getSplitCurves(params, curveSegments);
 }
-Acad::ErrorStatus DbPolyline::extend(double)
+Acad::ErrorStatus DbPolyline::extend(double newParam)
 {
-	return Acad::ErrorStatus::eFail;
+	GePoint3d pt;
+	this->getPointAtParam(newParam, pt);
+	// 转到2D OCS
+	GeMatrix3d matW2E;
+	matW2E.setToWorldToPlane(this->normal());
+	pt -= (this->normal() * this->elevation());
+	pt.transformBy(matW2E);
+
+	int n = this->numVerts();
+	double endP = 0.0;
+	this->getEndParam(endP);
+	if (newParam > endP)
+	{
+		// 延伸终点
+		DB_IMP_POLYLINE(this->m_pImpl)->vertexs[n - 1] = GePoint2d(pt.x, pt.y);
+	}
+	else if (newParam < 0.0)
+	{
+		DB_IMP_POLYLINE(this->m_pImpl)->vertexs[0] = GePoint2d(pt.x, pt.y);
+	}
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbPolyline::extend(bool, const GePoint3d&)
+Acad::ErrorStatus DbPolyline::extend(bool extendStart, const GePoint3d& toPoint)
 {
-	return Acad::ErrorStatus::eFail;
+	GeMatrix3d matW2E;
+	matW2E.setToWorldToPlane(this->normal());
+	GePoint3d pt = toPoint;
+	pt -= (this->normal() * this->elevation());
+	pt.transformBy(matW2E);
+
+	int n = this->numVerts();
+	if (extendStart)
+		DB_IMP_POLYLINE(this->m_pImpl)->vertexs[0] = GePoint2d(pt.x, pt.y);
+	else
+		DB_IMP_POLYLINE(this->m_pImpl)->vertexs[n - 1] = GePoint2d(pt.x, pt.y);
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getArea(double& area) const
 {
+	// Shoelace公式计算多边形面积 (2D OCS中)
 	area = 0.0;
+	int n = this->numVerts();
+	if (n < 3) return Acad::ErrorStatus::eOk;
+
+	for (int i = 0; i < n; i++)
+	{
+		GePoint2d p1, p2;
+		this->getPointAt(i, p1);
+		this->getPointAt((i + 1) % n, p2);
+		area += (p1.x * p2.y - p2.x * p1.y);
+
+		// 弧段修正
+		double bulge = 0.0;
+		this->getBulgeAt(i, bulge);
+		if (fabs(bulge) > 1e-10)
+		{
+			double dx = p2.x - p1.x;
+			double dy = p2.y - p1.y;
+			double chordLen = sqrt(dx * dx + dy * dy);
+			if (chordLen > 1e-10)
+			{
+				// 弧段面积修正: A_seg = r^2 * (theta - sin(theta)) / 2
+				double theta = 4.0 * atan(fabs(bulge));
+				double r = chordLen / (2.0 * sin(theta / 2.0));
+				double segArea = r * r * (theta - sin(theta)) * 0.5;
+				if (bulge > 0)
+					area += segArea;
+				else
+					area -= segArea;
+			}
+		}
+	}
+	area = fabs(area) * 0.5;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::reverseCurve()
 {
-	return Acad::ErrorStatus::eFail;
+	int n = this->numVerts();
+	if (n < 2) return Acad::ErrorStatus::eOk;
+
+	// 反转顶点顺序
+	for (int i = 0; i < n / 2; i++)
+	{
+		int j = n - 1 - i;
+		// 交换顶点
+		GePoint2d tmp = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[i];
+		DB_IMP_POLYLINE(this->m_pImpl)->vertexs[i] = DB_IMP_POLYLINE(this->m_pImpl)->vertexs[j];
+		DB_IMP_POLYLINE(this->m_pImpl)->vertexs[j] = tmp;
+	}
+
+	// 反转segment bulge并移位 (bulge[i] → -bulge[n-2-i])
+	int ns = DB_IMP_POLYLINE(this->m_pImpl)->segments.length();
+	if (ns > 0)
+	{
+		GeDoubleArray newBulges;
+		for (int i = 0; i < ns; i++) newBulges.append(0.0);
+		for (int i = 0; i < ns - 1; i++)
+		{
+			newBulges[i] = -DB_IMP_POLYLINE(this->m_pImpl)->segments[ns - 2 - i]->bulge;
+		}
+		if (this->isClosed())
+			newBulges[ns - 1] = -DB_IMP_POLYLINE(this->m_pImpl)->segments[ns - 1]->bulge;
+		for (int i = 0; i < ns; i++)
+		{
+			DB_IMP_POLYLINE(this->m_pImpl)->segments[i]->bulge = newBulges[i];
+		}
+	}
+
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPolyline::getGeCurve(GeCurve3d*& pGeCurve, const GeTol& tol) const
 {

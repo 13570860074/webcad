@@ -5,7 +5,10 @@
 #include "GiWorldGeometry.h"
 #include "kernel.h"
 #include "DbObjectManager.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
 #include "DbImpl.h"
+#include <cmath>
 
 
 DbMText::DbMText() {
@@ -581,6 +584,80 @@ Acad::ErrorStatus DbMText::setColumnWidth(double _columnWidth) {
 		return Acad::ErrorStatus::eOk;
 	}
 	return Acad::ErrorStatus::eFail;
+}
+
+Acad::ErrorStatus DbMText::subGetGeomExtents(DbExtents& extents) const {
+	GePoint3d loc = this->location();
+	double h = this->textHeight();
+	if (h < 1e-10) h = 2.5;
+	double rot = this->rotation();
+	// 估算文本宽度
+	AcString str;
+	this->contents(str);
+	int len = str.length();
+	double w = h * len * 0.6;
+	double aw = DB_IMP_MTEXT(this->m_pImpl)->actualWidth;
+	if (aw > 0) w = aw;
+	double ah = DB_IMP_MTEXT(this->m_pImpl)->actualHeight;
+	if (ah > 0) h = ah;
+
+	double cosR = cos(rot);
+	double sinR = sin(rot);
+	GeVector3d dirX(cosR, sinR, 0.0);
+	GeVector3d dirY(-sinR, cosR, 0.0);
+
+	GePoint3d corners[4];
+	corners[0] = loc;
+	corners[1] = loc + dirX * w;
+	corners[2] = loc + dirX * w + dirY * (-h);
+	corners[3] = loc + dirY * (-h);
+	for (int i = 0; i < 4; i++) {
+		extents.addPoint(corners[i]);
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbMText::subTransformBy(const GeMatrix3d& xform) {
+	DbMTextImpl* imp = DB_IMP_MTEXT(this->m_pImpl);
+	imp->location.transformBy(xform);
+	imp->direction.transformBy(xform);
+	double scale = imp->direction.length();
+	if (scale > 1e-14) {
+		imp->direction.normalize();
+		imp->textHeight *= scale;
+		imp->actualWidth *= scale;
+		imp->actualHeight *= scale;
+	}
+	imp->normal.transformBy(xform);
+	imp->normal.normalize();
+	imp->rotation = atan2(imp->direction.y, imp->direction.x);
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbMText::subGetGripPoints(DbGripDataPtrArray& grips, const double curViewUnitSize, const int gripSize, const GeVector3d& curViewDir, const int bitflags) const {
+	DbGripData* grip = new DbGripData();
+	grip->setGripPoint(this->location());
+	grips.append(grip);
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbMText::subGetOsnapPoints(Db::OsnapMode osnapMode, Adesk::GsMarker gsSelectionMark, const GePoint3d& pickPoint, const GePoint3d& lastPoint, const GeMatrix3d& viewXform, GePoint3dArray& snapPoints, DbIntArray& geomIds) const {
+	if (osnapMode == Db::OsnapMode::kOsModeIns) {
+		snapPoints.append(this->location());
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbMText::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) {
+	DbMTextImpl* imp = DB_IMP_MTEXT(this->m_pImpl);
+	for (int i = 0; i < indices.length(); i++) {
+		if (indices[i] == 0) {
+			imp->location += offset;
+		}
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbMText::subMoveGripPointsAt(const DbVoidPtrArray& gripAppData, const GeVector3d& offset, const int bitflags) {
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbMText::subIntersectWith(const DbEntity* pEnt, Db::Intersect intType, GePoint3dArray& points, Adesk::GsMarker thisGsMarker, Adesk::GsMarker otherGsMarker) const {
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbMText::getColumnGutterWidth(double& _columnGutterWidth) const {
 	_columnGutterWidth = DB_IMP_MTEXT(this->m_pImpl)->columnGutterWidth;

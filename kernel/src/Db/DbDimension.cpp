@@ -1653,8 +1653,33 @@ Acad::ErrorStatus DbDimension::setDimfxlen(double v) {
 
 
 bool DbDimension::subWorldDraw(GiWorldDraw* pWd) const {
+	// ODA模式: 标注实体预先将几何(尺寸线、延伸线、箭头、文字)存入匿名块dimBlock
+	// subWorldDraw只需遍历并绘制dimBlock中的所有子实体
+	DbObjectId blockId = this->dimBlockId();
+	if (blockId.isNull()) {
+		return true;
+	}
 
+	DbBlockTableRecord* pBlock = (DbBlockTableRecord*)::kernel()->acdbObjectManager()->openDbObject(blockId);
+	if (pBlock == NULL) {
+		return true;
+	}
 
+	DbBlockTableRecordIterator* pIter = NULL;
+	pBlock->newIterator(pIter);
+	if (pIter != NULL) {
+		for (pIter->start(); !pIter->done(); pIter->step()) {
+			DbEntity* pEntity = NULL;
+			pIter->getEntity(pEntity);
+			if (pEntity != NULL) {
+				pEntity->subWorldDraw(pWd);
+				pEntity->close();
+			}
+		}
+		delete pIter;
+	}
+
+	pBlock->close();
 	return true;
 }
 Acad::ErrorStatus DbDimension::dwgInFields(DbDwgFiler* pFiler) {

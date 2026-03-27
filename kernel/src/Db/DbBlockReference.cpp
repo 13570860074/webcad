@@ -13,6 +13,8 @@
 #include "DbImpl.h"
 #include "GiImpl.h"
 #include "DbLine.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
 
 DbBlockReference::DbBlockReference()
 {
@@ -245,6 +247,47 @@ bool DbBlockReference::subWorldDraw(GiWorldDraw *pWd) const
 
 Acad::ErrorStatus DbBlockReference::subGetGeomExtents(DbExtents &extents) const
 {
+	DbObjectId blockId = this->blockTableRecord();
+	if (blockId.isNull()) {
+		return Acad::ErrorStatus::eOk;
+	}
+
+	DbBlockTableRecord* pBlock = NULL;
+	if (::acdbOpenObject(pBlock, blockId, Db::kForRead) != Acad::eOk || pBlock == NULL) {
+		return Acad::ErrorStatus::eOk;
+	}
+
+	GeMatrix3d xform = this->blockTransform();
+
+	// 遍历块内实体，累加变换后的范围
+	DbBlockTableRecordIterator* pIter = NULL;
+	pBlock->newIterator(pIter);
+	if (pIter != NULL) {
+		for (pIter->start(); !pIter->done(); pIter->step()) {
+			DbEntity* pEntity = NULL;
+			pIter->getEntity(pEntity);
+			if (pEntity != NULL) {
+				DbExtents entExt;
+				if (pEntity->subGetGeomExtents(entExt) == Acad::eOk) {
+					// 变换子实体范围的8个角点
+					GePoint3d mn = entExt.minPoint();
+					GePoint3d mx = entExt.maxPoint();
+					for (int i = 0; i < 8; i++) {
+						GePoint3d corner(
+							(i & 1) ? mx.x : mn.x,
+							(i & 2) ? mx.y : mn.y,
+							(i & 4) ? mx.z : mn.z);
+						corner.transformBy(xform);
+						extents.addPoint(corner);
+					}
+				}
+				pEntity->close();
+			}
+		}
+		delete pIter;
+	}
+	pBlock->close();
+
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbBlockReference::subTransformBy(const GeMatrix3d &xform)
@@ -336,8 +379,9 @@ Acad::ErrorStatus DbBlockReference::subGetOsnapPoints(
 	GePoint3dArray &snapPoints,
 	DbIntArray &geomIds) const
 {
-
-	
+	if (osnapMode == Db::kOsModeIns) {
+		snapPoints.append(this->position());
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -356,6 +400,7 @@ Acad::ErrorStatus DbBlockReference::subMoveGripPointsAt(const DbIntArray &indice
 
 Acad::ErrorStatus DbBlockReference::subMoveGripPointsAt(const DbVoidPtrArray &gripAppData, const GeVector3d &offset, const int bitflags)
 {
+	DB_IMP_BLOCKREFERENCE(this->m_pImpl)->position += offset;
 	return Acad::ErrorStatus::eOk;
 }
 

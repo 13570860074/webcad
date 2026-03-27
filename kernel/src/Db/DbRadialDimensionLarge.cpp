@@ -2,6 +2,12 @@
 #include "GeMatrix3d.h"
 #include "DbObjectId.h"
 #include "DbImpl.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
+#include "GiWorldDraw.h"
+#include "GiWorldGeometry.h"
+#include <cmath>
+#include <cstdio>
 
 
 DbRadialDimensionLarge::DbRadialDimensionLarge() {
@@ -211,16 +217,85 @@ Acad::ErrorStatus DbRadialDimensionLarge::dwgOutFields(DbDwgFiler* pFiler) const
 
 	return Acad::ErrorStatus::eOk;
 }
+namespace
+{
+	void drawArrowRadLarge(GiWorldDraw* pWd, const GePoint3d& tip, const GeVector3d& dir, const GeVector3d& normal, double size)
+	{
+		if (dir.length() < 1e-10 || size < 1e-10) return;
+		GeVector3d d = dir;
+		d.normalize();
+		GeVector3d perp = d.crossProduct(normal);
+		if (perp.length() < 1e-10) perp = d.crossProduct(GeVector3d::kZAxis);
+		if (perp.length() < 1e-10) return;
+		perp.normalize();
+		GePoint3d pts[3];
+		pts[0] = tip;
+		pts[1] = tip + d * size + perp * (size * 0.3);
+		pts[2] = tip + d * size - perp * (size * 0.3);
+		pWd->geometry().polygon(3, pts);
+	}
+}
+
 bool DbRadialDimensionLarge::subWorldDraw(GiWorldDraw* pWd) const {
-	return DbDimension::subWorldDraw(pWd);
+	GePoint3d cen = this->center();
+	GePoint3d chord = this->chordPoint();
+	GePoint3d overrideCen = this->overrideCenter();
+	GePoint3d jog = this->jogPoint();
+
+	double scale = this->dimscale();
+	if (scale < 1e-10) scale = 1.0;
+	double asz = this->dimasz() * scale;
+	double txt = this->dimtxt() * scale;
+
+	GeVector3d normal = this->normal();
+	if (normal.length() < 1e-10) normal = GeVector3d::kZAxis;
+
+	GeVector3d dimDir = chord - overrideCen;
+	if (dimDir.length() < 1e-10) {
+		return DbDimension::subWorldDraw(pWd);
+	}
+
+	// 从虚拟中心到折弯点
+	pWd->geometry().line(overrideCen, jog);
+
+	// 从折弯点到弦点
+	pWd->geometry().line(jog, chord);
+
+	// 箭头在弦点处
+	GeVector3d arrowDir = overrideCen - chord;
+	drawArrowRadLarge(pWd, chord, arrowDir, normal, asz);
+
+	// 文字
+	double radius = cen.distanceTo(chord);
+	char buf[64];
+	snprintf(buf, sizeof(buf), "R%.2f", radius);
+	GePoint3d textPos = jog + (chord - jog) * 0.5;
+	GeVector3d textDir = dimDir;
+	textDir.normalize();
+	pWd->geometry().text(textPos, normal, textDir, txt, 1.0, 0.0, buf);
+
+	return true;
 }
 
 Acad::ErrorStatus DbRadialDimensionLarge::subGetGeomExtents(DbExtents &extents) const
 {
+	auto* imp = DB_IMP_RADIALDIMENSIONLARGE(this->m_pImpl);
+	extents.addPoint(imp->center);
+	extents.addPoint(imp->chordPoint);
+	extents.addPoint(imp->overrideCenter);
+	extents.addPoint(imp->jogPoint);
+	extents.addPoint(DB_IMP_DIMENSION(this->m_pImpl)->textPosition);
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRadialDimensionLarge::subTransformBy(const GeMatrix3d& xform) {
-
+	auto* imp = DB_IMP_RADIALDIMENSIONLARGE(this->m_pImpl);
+	imp->center.transformBy(xform);
+	imp->chordPoint.transformBy(xform);
+	imp->overrideCenter.transformBy(xform);
+	imp->jogPoint.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->textPosition.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->normal.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->normal.normalize();
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -230,9 +305,13 @@ Acad::ErrorStatus DbRadialDimensionLarge::subGetGripPoints(
 	const int gripSize,
 	const GeVector3d& curViewDir,
 	const int bitflags) const {
-
-
-
+	auto* imp = DB_IMP_RADIALDIMENSIONLARGE(this->m_pImpl);
+	GePoint3d pts[] = { imp->center, imp->chordPoint, imp->jogPoint, DB_IMP_DIMENSION(this->m_pImpl)->textPosition };
+	for (int i = 0; i < 4; i++) {
+		DbGripData* grip = new DbGripData();
+		grip->setGripPoint(pts[i]);
+		grips.append(grip);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -244,13 +323,24 @@ Acad::ErrorStatus DbRadialDimensionLarge::subGetOsnapPoints(
 	const GeMatrix3d& viewXform,
 	GePoint3dArray& snapPoints,
 	DbIntArray& geomIds) const {
-
+	if (osnapMode == Db::kOsModeEnd) {
+		auto* imp = DB_IMP_RADIALDIMENSIONLARGE(this->m_pImpl);
+		snapPoints.append(imp->center);
+		snapPoints.append(imp->chordPoint);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
 Acad::ErrorStatus DbRadialDimensionLarge::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) {
-
-
+	auto* imp = DB_IMP_RADIALDIMENSIONLARGE(this->m_pImpl);
+	for (int i = 0; i < indices.length(); i++) {
+		switch (indices[i]) {
+			case 0: imp->center += offset; break;
+			case 1: imp->chordPoint += offset; break;
+			case 2: imp->jogPoint += offset; break;
+			case 3: DB_IMP_DIMENSION(this->m_pImpl)->textPosition += offset; break;
+		}
+	}
 	return Acad::ErrorStatus::eOk;
 }
 

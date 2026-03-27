@@ -1,4 +1,6 @@
 #include "DbRotatedDimension.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
 #include "GiWorldDraw.h"
 #include "GiWorldGeometry.h"
 #include "GeMatrix3d.h"
@@ -10,6 +12,8 @@
 #include "DbLine.h"
 #include "kernel.h"
 #include "DbImpl.h"
+#include <cmath>
+#include <cstdio>
 
 
 DbRotatedDimension::DbRotatedDimension() {
@@ -186,18 +190,118 @@ Acad::ErrorStatus DbRotatedDimension::dwgOutFields(DbDwgFiler* pFiler) const {
 
 	return Acad::ErrorStatus::eOk;
 }
-bool DbRotatedDimension::subWorldDraw(GiWorldDraw* pWd) const {
+namespace
+{
+	void drawArrow(GiWorldDraw* pWd, const GePoint3d& tip, const GeVector3d& dir, const GeVector3d& normal, double size)
+	{
+		if (dir.length() < 1e-10 || size < 1e-10) return;
+		GeVector3d d = dir;
+		d.normalize();
+		GeVector3d perp = d.crossProduct(normal);
+		if (perp.length() < 1e-10) perp = d.crossProduct(GeVector3d::kZAxis);
+		if (perp.length() < 1e-10) return;
+		perp.normalize();
+		GePoint3d pts[3];
+		pts[0] = tip;
+		pts[1] = tip + d * size + perp * (size * 0.3);
+		pts[2] = tip + d * size - perp * (size * 0.3);
+		pWd->geometry().polygon(3, pts);
+	}
+}
 
-	return DbDimension::subWorldDraw(pWd);
+bool DbRotatedDimension::subWorldDraw(GiWorldDraw* pWd) const {
+	// 获取定义点
+	GePoint3d p1 = this->xLine1Point();
+	GePoint3d p2 = this->xLine2Point();
+	GePoint3d dimPt = this->dimLinePoint();
+	double rot = this->rotation();
+
+	// dim style 变量
+	double scale = this->dimscale();
+	if (scale < 1e-10) scale = 1.0;
+	double asz = this->dimasz() * scale;
+	double txt = this->dimtxt() * scale;
+	double exo = this->dimexo() * scale;
+	double exe = this->dimexe() * scale;
+	double gap = this->dimgap() * scale;
+
+	// 尺寸线方向
+	GeVector3d dimDir(cos(rot), sin(rot), 0.0);
+	GeVector3d normal = this->normal();
+	if (normal.length() < 1e-10) normal = GeVector3d::kZAxis;
+	GeVector3d extDir = dimDir.crossProduct(normal);
+	if (extDir.length() < 1e-10) {
+		return DbDimension::subWorldDraw(pWd);
+	}
+	extDir.normalize();
+
+	// 将定义点投影到尺寸线方向
+	double proj1 = dimDir.dotProduct(p1 - GePoint3d::kOrigin);
+	double proj2 = dimDir.dotProduct(p2 - GePoint3d::kOrigin);
+	double projDim = extDir.dotProduct(dimPt - GePoint3d::kOrigin);
+	double ext1 = extDir.dotProduct(p1 - GePoint3d::kOrigin);
+
+	// 尺寸线上的两个端点
+	GePoint3d d1 = p1 + extDir * (projDim - ext1);
+	GePoint3d d2 = p2 + extDir * (projDim - extDir.dotProduct(p2 - GePoint3d::kOrigin));
+
+	// 绘制尺寸线
+	pWd->geometry().line(d1, d2);
+
+	// 绘制延伸线
+	GeVector3d ext1Dir = d1 - p1;
+	double ext1Len = ext1Dir.length();
+	if (ext1Len > 1e-10) {
+		ext1Dir.normalize();
+		GePoint3d e1Start = p1 + ext1Dir * exo;
+		GePoint3d e1End = d1 + ext1Dir * exe;
+		pWd->geometry().line(e1Start, e1End);
+	}
+	GeVector3d ext2Dir = d2 - p2;
+	double ext2Len = ext2Dir.length();
+	if (ext2Len > 1e-10) {
+		ext2Dir.normalize();
+		GePoint3d e2Start = p2 + ext2Dir * exo;
+		GePoint3d e2End = d2 + ext2Dir * exe;
+		pWd->geometry().line(e2Start, e2End);
+	}
+
+	// 绘制箭头
+	GeVector3d arrowDir1 = d2 - d1;
+	GeVector3d arrowDir2 = d1 - d2;
+	drawArrow(pWd, d1, arrowDir1, normal, asz);
+	drawArrow(pWd, d2, arrowDir2, normal, asz);
+
+	// 绘制标注文字
+	double meas = d1.distanceTo(d2);
+	char buf[64];
+	snprintf(buf, sizeof(buf), "%.2f", meas);
+	GePoint3d textPos = d1 + (d2 - d1) * 0.5;
+	GeVector3d textDir = dimDir;
+	textDir.normalize();
+	pWd->geometry().text(textPos, normal, textDir, txt, 1.0, 0.0, buf);
+
+	return true;
 }
 
 
 Acad::ErrorStatus DbRotatedDimension::subGetGeomExtents(DbExtents &extents) const
 {
+	auto* imp = DB_IMP_ROTATEDDIMENSION(this->m_pImpl);
+	extents.addPoint(imp->xLine1Point);
+	extents.addPoint(imp->xLine2Point);
+	extents.addPoint(imp->dimLinePoint);
+	extents.addPoint(DB_IMP_DIMENSION(this->m_pImpl)->textPosition);
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRotatedDimension::subTransformBy(const GeMatrix3d& xform) {
-
+	auto* imp = DB_IMP_ROTATEDDIMENSION(this->m_pImpl);
+	imp->xLine1Point.transformBy(xform);
+	imp->xLine2Point.transformBy(xform);
+	imp->dimLinePoint.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->textPosition.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->normal.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->normal.normalize();
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -207,9 +311,13 @@ Acad::ErrorStatus DbRotatedDimension::subGetGripPoints(
 	const int gripSize,
 	const GeVector3d& curViewDir,
 	const int bitflags) const {
-
-
-
+	auto* imp = DB_IMP_ROTATEDDIMENSION(this->m_pImpl);
+	GePoint3d pts[] = { imp->xLine1Point, imp->xLine2Point, imp->dimLinePoint, DB_IMP_DIMENSION(this->m_pImpl)->textPosition };
+	for (int i = 0; i < 4; i++) {
+		DbGripData* grip = new DbGripData();
+		grip->setGripPoint(pts[i]);
+		grips.append(grip);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -221,13 +329,24 @@ Acad::ErrorStatus DbRotatedDimension::subGetOsnapPoints(
 	const GeMatrix3d& viewXform,
 	GePoint3dArray& snapPoints,
 	DbIntArray& geomIds) const {
-
+	if (osnapMode == Db::kOsModeEnd) {
+		auto* imp = DB_IMP_ROTATEDDIMENSION(this->m_pImpl);
+		snapPoints.append(imp->xLine1Point);
+		snapPoints.append(imp->xLine2Point);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
 Acad::ErrorStatus DbRotatedDimension::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) {
-
-
+	auto* imp = DB_IMP_ROTATEDDIMENSION(this->m_pImpl);
+	for (int i = 0; i < indices.length(); i++) {
+		switch (indices[i]) {
+			case 0: imp->xLine1Point += offset; break;
+			case 1: imp->xLine2Point += offset; break;
+			case 2: imp->dimLinePoint += offset; break;
+			case 3: DB_IMP_DIMENSION(this->m_pImpl)->textPosition += offset; break;
+		}
+	}
 	return Acad::ErrorStatus::eOk;
 }
 

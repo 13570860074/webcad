@@ -13,7 +13,9 @@
 #include "GeLine3d.h"
 #include "GeCircArc3d.h"
 #include "DbOsnapPointCompute.h"
+#include "DbExtents.h"
 #include "DbImpl.h"
+#include <cmath>
 
 DbCircle::DbCircle()
 {
@@ -160,6 +162,18 @@ bool DbCircle::subWorldDraw(GiWorldDraw *pWd) const
 
 Acad::ErrorStatus DbCircle::subGetGeomExtents(DbExtents &extents) const
 {
+	// ODA: 圆的包围盒需考虑任意法线方向
+	GePoint3d cen = this->center();
+	double r = this->radius();
+	GeVector3d n = this->normal();
+
+	// 计算各轴向上的半径投影
+	double rx = r * sqrt(1.0 - n.x * n.x);
+	double ry = r * sqrt(1.0 - n.y * n.y);
+	double rz = r * sqrt(1.0 - n.z * n.z);
+
+	extents.addPoint(GePoint3d(cen.x - rx, cen.y - ry, cen.z - rz));
+	extents.addPoint(GePoint3d(cen.x + rx, cen.y + ry, cen.z + rz));
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbCircle::subTransformBy(const GeMatrix3d &xform)
@@ -425,49 +439,108 @@ Acad::ErrorStatus DbCircle::getPointAtParam(double param, GePoint3d &pos) const
     pos.rotateBy(param, this->normal(), this->center());
     return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getParamAtPoint(const GePoint3d &, double &) const
+Acad::ErrorStatus DbCircle::getParamAtPoint(const GePoint3d &point, double &param) const
 {
-    return Acad::ErrorStatus::eOk;
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	GeVector3d v = point - this->center();
+	param = refVec.angleToCCW(v, this->normal());
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getDistAtParam(double, double &) const
+Acad::ErrorStatus DbCircle::getDistAtParam(double param, double &dist) const
 {
-    return Acad::ErrorStatus::eFail;
+	// 距离 = 弧长 = radius * angle
+	dist = this->radius() * param;
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getParamAtDist(double, double &) const
+Acad::ErrorStatus DbCircle::getParamAtDist(double dist, double &param) const
 {
-    return Acad::ErrorStatus::eFail;
+	double r = this->radius();
+	if (r < 1e-10) return Acad::ErrorStatus::eFail;
+	param = dist / r;
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getDistAtPoint(const GePoint3d &, double &) const
+Acad::ErrorStatus DbCircle::getDistAtPoint(const GePoint3d &point, double &dist) const
 {
-    return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getDistAtParam(param, dist);
 }
-Acad::ErrorStatus DbCircle::getPointAtDist(double, GePoint3d &) const
+Acad::ErrorStatus DbCircle::getPointAtDist(double dist, GePoint3d &point) const
 {
-    return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtDist(dist, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getPointAtParam(param, point);
 }
-Acad::ErrorStatus DbCircle::getFirstDeriv(double, GeVector3d &) const
+Acad::ErrorStatus DbCircle::getFirstDeriv(double param, GeVector3d &firstDeriv) const
 {
-    return Acad::ErrorStatus::eFail;
+	// 一阶导数: 圆在param处的切线方向 * radius
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	// 切线 = d/dt(center + r*cos(t)*refVec + r*sin(t)*perpVec)
+	GeVector3d perpVec = this->normal().crossProduct(refVec);
+	perpVec.normalize();
+	double r = this->radius();
+	firstDeriv = refVec * (-r * sin(param)) + perpVec * (r * cos(param));
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getFirstDeriv(const GePoint3d &, GeVector3d &) const
+Acad::ErrorStatus DbCircle::getFirstDeriv(const GePoint3d &point, GeVector3d &firstDeriv) const
 {
-    return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getFirstDeriv(param, firstDeriv);
 }
-Acad::ErrorStatus DbCircle::getSecondDeriv(double, GeVector3d &) const
+Acad::ErrorStatus DbCircle::getSecondDeriv(double param, GeVector3d &secDeriv) const
 {
-    return Acad::ErrorStatus::eFail;
+	// 二阶导数: 指向圆心的法线方向 * radius
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	GeVector3d perpVec = this->normal().crossProduct(refVec);
+	perpVec.normalize();
+	double r = this->radius();
+	secDeriv = refVec * (-r * cos(param)) + perpVec * (-r * sin(param));
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getSecondDeriv(const GePoint3d &, GeVector3d &) const
+Acad::ErrorStatus DbCircle::getSecondDeriv(const GePoint3d &point, GeVector3d &secDeriv) const
 {
-    return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getSecondDeriv(param, secDeriv);
 }
-Acad::ErrorStatus DbCircle::getClosestPointTo(const GePoint3d &, GePoint3d &, bool) const
+Acad::ErrorStatus DbCircle::getClosestPointTo(const GePoint3d &givenPnt, GePoint3d &pointOnCurve, bool extend) const
 {
-    return Acad::ErrorStatus::eFail;
+	GeVector3d v = givenPnt - this->center();
+	double len = v.length();
+	if (len < 1e-10)
+	{
+		// 点在圆心, 返回参数0处的点
+		return this->getPointAtParam(0.0, pointOnCurve);
+	}
+	v.normalize();
+	pointOnCurve = this->center() + v * this->radius();
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getClosestPointTo(const GePoint3d &, const GeVector3d &, GePoint3d &, bool) const
+Acad::ErrorStatus DbCircle::getClosestPointTo(const GePoint3d &givenPnt, const GeVector3d &normal, GePoint3d &pointOnCurve, bool extend) const
 {
-    return Acad::ErrorStatus::eFail;
+	// 将点投影到圆所在平面后求最近点
+	GePoint3d projPnt = givenPnt.project(GePlane(this->center(), this->normal()), normal);
+	return this->getClosestPointTo(projPnt, pointOnCurve, extend);
 }
 Acad::ErrorStatus DbCircle::getOrthoProjectedCurve(const GePlane &, DbCurve *&) const
 {
@@ -477,21 +550,65 @@ Acad::ErrorStatus DbCircle::getProjectedCurve(const GePlane &, const GeVector3d 
 {
     return Acad::ErrorStatus::eFail;
 }
-Acad::ErrorStatus DbCircle::getOffsetCurves(double, DbVoidPtrArray &) const
+Acad::ErrorStatus DbCircle::getOffsetCurves(double offsetDist, DbVoidPtrArray &curves) const
 {
-    return Acad::ErrorStatus::eFail;
+	double r = this->radius() + offsetDist;
+	if (r < 1e-10)
+		return Acad::ErrorStatus::eFail;
+	DbCircle *pCircle = new DbCircle();
+	pCircle->setCenter(this->center());
+	pCircle->setRadius(r);
+	pCircle->setNormal(this->normal());
+	curves.append(pCircle);
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbCircle::getSpline(DbSpline *&) const
 {
     return Acad::ErrorStatus::eFail;
 }
-Acad::ErrorStatus DbCircle::getSplitCurves(const GeDoubleArray &, DbVoidPtrArray &curveSegments) const
+Acad::ErrorStatus DbCircle::getSplitCurves(const GeDoubleArray &params, DbVoidPtrArray &curveSegments) const
 {
-    return Acad::ErrorStatus::eFail;
+	if (params.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+
+	GeDoubleArray sortedParams;
+	for (int i = 0; i < params.length(); i++)
+		sortedParams.append(params[i]);
+	for (int i = 0; i < sortedParams.length() - 1; i++)
+		for (int j = i + 1; j < sortedParams.length(); j++)
+			if (sortedParams[i] > sortedParams[j])
+			{
+				double t = sortedParams[i];
+				sortedParams[i] = sortedParams[j];
+				sortedParams[j] = t;
+			}
+
+	for (int i = 0; i < sortedParams.length(); i++)
+	{
+		double sa = sortedParams[i];
+		double ea = (i + 1 < sortedParams.length()) ? sortedParams[i + 1] : sortedParams[0] + 2.0 * PI;
+		DbArc *arc = new DbArc();
+		arc->setCenter(this->center());
+		arc->setRadius(this->radius());
+		arc->setNormal(this->normal());
+		arc->setStartAngle(sa);
+		arc->setEndAngle(ea);
+		curveSegments.append(arc);
+	}
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbCircle::getSplitCurves(const GePoint3dArray &, DbVoidPtrArray &) const
+Acad::ErrorStatus DbCircle::getSplitCurves(const GePoint3dArray &points, DbVoidPtrArray &curveSegments) const
 {
-    return Acad::ErrorStatus::eFail;
+	if (points.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+	GeDoubleArray params;
+	for (int i = 0; i < points.length(); i++)
+	{
+		double p;
+		this->getParamAtPoint(points[i], p);
+		params.append(p);
+	}
+	return this->getSplitCurves(params, curveSegments);
 }
 Acad::ErrorStatus DbCircle::extend(double _val)
 {

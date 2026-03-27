@@ -20,6 +20,7 @@ public:
         double              rotation = 0);
     virtual ~DbText();
     DB_ENTITY_DECLARE_MEMBERS(DbText);
+    DB_ENTITY_DECLARE_OVERRIDE_METHOD;
 
 
     GePoint3d         position() const;

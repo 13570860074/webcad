@@ -14,7 +14,9 @@
 #include "GeLine3d.h"
 #include "GeCircArc3d.h"
 #include "DbOsnapPointCompute.h"
+#include "DbExtents.h"
 #include "DbImpl.h"
+#include <cmath>
 
 DbArc::DbArc()
 {
@@ -238,6 +240,36 @@ bool DbArc::subOpen(Db::OpenMode mode)
 
 Acad::ErrorStatus DbArc::subGetGeomExtents(DbExtents &extents) const
 {
+	// 采样弧上的点 + 检查轴向极值点
+	GePoint3d pt;
+	this->getStartPoint(pt);
+	extents.addPoint(pt);
+	this->getEndPoint(pt);
+	extents.addPoint(pt);
+
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	double sa = this->startAngle();
+	double ea = this->endAngle();
+	// 检查0, PI/2, PI, 3PI/2这四个轴向极值角是否在弧上
+	for (int i = 0; i < 4; i++)
+	{
+		double angle = i * PI / 2.0;
+		bool inArc = false;
+		if (ea > sa)
+			inArc = (angle >= sa && angle <= ea);
+		else
+			inArc = (angle >= sa || angle <= ea);
+		if (inArc)
+		{
+			this->getPointAtParam(angle, pt);
+			extents.addPoint(pt);
+		}
+	}
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbArc::subTransformBy(const GeMatrix3d &xform)
@@ -660,7 +692,7 @@ Acad::ErrorStatus DbArc::getPlane(GePlane &plane, Db::Planarity &planarity) cons
 {
 	plane.set(this->center(), this->normal());
 	planarity = Db::Planarity::kPlanar;
-	return Acad::ErrorStatus::eFail;
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbArc::getStartParam(double &_v) const
 {
@@ -692,49 +724,131 @@ Acad::ErrorStatus DbArc::getPointAtParam(double param, GePoint3d &point) const
 	point.rotateBy(param, this->normal(), this->center());
 	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getParamAtPoint(const GePoint3d &, double &) const
+Acad::ErrorStatus DbArc::getParamAtPoint(const GePoint3d &point, double &param) const
 {
-	return Acad::ErrorStatus::eFail;
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	GeVector3d v = point - this->center();
+	param = refVec.angleToCCW(v, this->normal());
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getDistAtParam(double, double &) const
+Acad::ErrorStatus DbArc::getDistAtParam(double param, double &dist) const
 {
-	return Acad::ErrorStatus::eFail;
+	double sa = this->startAngle();
+	double angle = param - sa;
+	if (angle < 0) angle += 2.0 * PI;
+	dist = this->radius() * angle;
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getParamAtDist(double, double &) const
+Acad::ErrorStatus DbArc::getParamAtDist(double dist, double &param) const
 {
-	return Acad::ErrorStatus::eFail;
+	double r = this->radius();
+	if (r < 1e-10) return Acad::ErrorStatus::eFail;
+	double angle = dist / r;
+	param = this->startAngle() + angle;
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getDistAtPoint(const GePoint3d &, double &) const
+Acad::ErrorStatus DbArc::getDistAtPoint(const GePoint3d &point, double &dist) const
 {
-	return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getDistAtParam(param, dist);
 }
-Acad::ErrorStatus DbArc::getPointAtDist(double, GePoint3d &) const
+Acad::ErrorStatus DbArc::getPointAtDist(double dist, GePoint3d &point) const
 {
-	return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtDist(dist, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getPointAtParam(param, point);
 }
-Acad::ErrorStatus DbArc::getFirstDeriv(double, GeVector3d &) const
+Acad::ErrorStatus DbArc::getFirstDeriv(double param, GeVector3d &firstDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	GeVector3d perpVec = this->normal().crossProduct(refVec);
+	perpVec.normalize();
+	double r = this->radius();
+	firstDeriv = refVec * (-r * sin(param)) + perpVec * (r * cos(param));
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getFirstDeriv(const GePoint3d &, GeVector3d &) const
+Acad::ErrorStatus DbArc::getFirstDeriv(const GePoint3d &point, GeVector3d &firstDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getFirstDeriv(param, firstDeriv);
 }
-Acad::ErrorStatus DbArc::getSecondDeriv(double, GeVector3d &) const
+Acad::ErrorStatus DbArc::getSecondDeriv(double param, GeVector3d &secDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(this->normal());
+	GeVector3d refVec = GeVector3d::kXAxis;
+	refVec.transformBy(mat);
+	refVec.normalize();
+
+	GeVector3d perpVec = this->normal().crossProduct(refVec);
+	perpVec.normalize();
+	double r = this->radius();
+	secDeriv = refVec * (-r * cos(param)) + perpVec * (-r * sin(param));
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getSecondDeriv(const GePoint3d &, GeVector3d &) const
+Acad::ErrorStatus DbArc::getSecondDeriv(const GePoint3d &point, GeVector3d &secDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	Acad::ErrorStatus es = this->getParamAtPoint(point, param);
+	if (es != Acad::ErrorStatus::eOk) return es;
+	return this->getSecondDeriv(param, secDeriv);
 }
-Acad::ErrorStatus DbArc::getClosestPointTo(const GePoint3d &, GePoint3d &, bool) const
+Acad::ErrorStatus DbArc::getClosestPointTo(const GePoint3d &givenPnt, GePoint3d &pointOnCurve, bool extend) const
 {
-	return Acad::ErrorStatus::eFail;
+	GeVector3d v = givenPnt - this->center();
+	double len = v.length();
+	if (len < 1e-10)
+	{
+		return this->getStartPoint(pointOnCurve);
+	}
+	v.normalize();
+	GePoint3d candidate = this->center() + v * this->radius();
+
+	if (!extend)
+	{
+		// 检查candidate是否在弧上
+		double param = 0.0;
+		this->getParamAtPoint(candidate, param);
+		double sa = this->startAngle();
+		double ea = this->endAngle();
+		bool onArc = false;
+		if (ea > sa)
+			onArc = (param >= sa - 1e-10 && param <= ea + 1e-10);
+		else
+			onArc = (param >= sa - 1e-10 || param <= ea + 1e-10);
+
+		if (!onArc)
+		{
+			// 返回距离较近的端点
+			GePoint3d sp, ep;
+			this->getStartPoint(sp);
+			this->getEndPoint(ep);
+			pointOnCurve = (givenPnt.distanceTo(sp) <= givenPnt.distanceTo(ep)) ? sp : ep;
+			return Acad::ErrorStatus::eOk;
+		}
+	}
+	pointOnCurve = candidate;
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getClosestPointTo(const GePoint3d &, const GeVector3d &, GePoint3d &, bool) const
+Acad::ErrorStatus DbArc::getClosestPointTo(const GePoint3d &givenPnt, const GeVector3d &normal, GePoint3d &pointOnCurve, bool extend) const
 {
-	return Acad::ErrorStatus::eFail;
+	GePoint3d projPnt = givenPnt.project(GePlane(this->center(), this->normal()), normal);
+	return this->getClosestPointTo(projPnt, pointOnCurve, extend);
 }
 Acad::ErrorStatus DbArc::getOrthoProjectedCurve(const GePlane &, DbCurve *&) const
 {
@@ -744,41 +858,120 @@ Acad::ErrorStatus DbArc::getProjectedCurve(const GePlane &, const GeVector3d &, 
 {
 	return Acad::ErrorStatus::eFail;
 }
-Acad::ErrorStatus DbArc::getOffsetCurves(double, DbVoidPtrArray &) const
+Acad::ErrorStatus DbArc::getOffsetCurves(double offsetDist, DbVoidPtrArray &curves) const
 {
-	return Acad::ErrorStatus::eFail;
+	double r = this->radius() + offsetDist;
+	if (r < 1e-10)
+		return Acad::ErrorStatus::eFail;
+	DbArc *pArc = new DbArc();
+	pArc->setCenter(this->center());
+	pArc->setRadius(r);
+	pArc->setNormal(this->normal());
+	pArc->setStartAngle(this->startAngle());
+	pArc->setEndAngle(this->endAngle());
+	curves.append(pArc);
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbArc::getSpline(DbSpline *&) const
 {
 	return Acad::ErrorStatus::eFail;
 }
-Acad::ErrorStatus DbArc::getSplitCurves(const GeDoubleArray &, DbVoidPtrArray &curveSegments) const
+Acad::ErrorStatus DbArc::getSplitCurves(const GeDoubleArray &params, DbVoidPtrArray &curveSegments) const
 {
-	return Acad::ErrorStatus::eFail;
+	if (params.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+
+	GeDoubleArray sortedParams;
+	for (int i = 0; i < params.length(); i++)
+		sortedParams.append(params[i]);
+	for (int i = 0; i < sortedParams.length() - 1; i++)
+		for (int j = i + 1; j < sortedParams.length(); j++)
+			if (sortedParams[i] > sortedParams[j])
+			{
+				double t = sortedParams[i];
+				sortedParams[i] = sortedParams[j];
+				sortedParams[j] = t;
+			}
+
+	double prevParam = this->startAngle();
+	for (int i = 0; i < sortedParams.length(); i++)
+	{
+		DbArc *arc = new DbArc();
+		arc->setCenter(this->center());
+		arc->setRadius(this->radius());
+		arc->setNormal(this->normal());
+		arc->setStartAngle(prevParam);
+		arc->setEndAngle(sortedParams[i]);
+		curveSegments.append(arc);
+		prevParam = sortedParams[i];
+	}
+	DbArc *arc = new DbArc();
+	arc->setCenter(this->center());
+	arc->setRadius(this->radius());
+	arc->setNormal(this->normal());
+	arc->setStartAngle(prevParam);
+	arc->setEndAngle(this->endAngle());
+	curveSegments.append(arc);
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getSplitCurves(const GePoint3dArray &, DbVoidPtrArray &) const
+Acad::ErrorStatus DbArc::getSplitCurves(const GePoint3dArray &points, DbVoidPtrArray &curveSegments) const
 {
-	return Acad::ErrorStatus::eFail;
+	if (points.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+	GeDoubleArray params;
+	for (int i = 0; i < points.length(); i++)
+	{
+		double p;
+		this->getParamAtPoint(points[i], p);
+		params.append(p);
+	}
+	return this->getSplitCurves(params, curveSegments);
 }
-Acad::ErrorStatus DbArc::extend(double)
+Acad::ErrorStatus DbArc::extend(double newParam)
 {
-	return Acad::ErrorStatus::eFail;
+	double sa = this->startAngle();
+	double ea = this->endAngle();
+	if (newParam < sa)
+		this->setStartAngle(newParam);
+	else if (newParam > ea)
+		this->setEndAngle(newParam);
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::extend(bool, const GePoint3d &)
+Acad::ErrorStatus DbArc::extend(bool extendStart, const GePoint3d &toPoint)
 {
-	return Acad::ErrorStatus::eFail;
+	double param = 0.0;
+	this->getParamAtPoint(toPoint, param);
+	if (extendStart)
+		this->setStartAngle(param);
+	else
+		this->setEndAngle(param);
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbArc::getArea(double &) const
+Acad::ErrorStatus DbArc::getArea(double &area) const
 {
-	return Acad::ErrorStatus::eFail;
+	// 弧所围扇形面积 = 0.5 * r^2 * totalAngle
+	double ta = this->totalAngle();
+	area = 0.5 * this->radius() * this->radius() * ta;
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbArc::reverseCurve()
 {
-	return Acad::ErrorStatus::eFail;
+	double sa = this->startAngle();
+	double ea = this->endAngle();
+	this->setStartAngle(ea);
+	this->setEndAngle(sa);
+	this->setNormal(this->normal().negate());
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbArc::getGeCurve(GeCurve3d *&pGeCurve, const GeTol &tol) const
 {
-	return Acad::ErrorStatus::eFail;
+	GePoint3d sp, mp, ep;
+	this->getStartPoint(sp);
+	double midParam = this->startAngle() + this->totalAngle() * 0.5;
+	this->getPointAtParam(midParam, mp);
+	this->getEndPoint(ep);
+	pGeCurve = new GeCircArc3d(sp, mp, ep);
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbArc::setFromGeCurve(const GeCurve3d &geCurve, GeVector3d *normal, const GeTol &tol)
 {

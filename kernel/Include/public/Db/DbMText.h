@@ -15,6 +15,7 @@ public:
     DbMText();
     virtual ~DbMText();
     DB_ENTITY_DECLARE_MEMBERS(DbMText);
+    DB_ENTITY_DECLARE_OVERRIDE_METHOD;
 
 
     //  Insertion point

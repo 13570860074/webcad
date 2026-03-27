@@ -3,6 +3,7 @@
 #include "GiWorldGeometry.h"
 #include "DbDwgFiler.h"
 #include "DbGripData.h"
+#include "DbExtents.h"
 #include "GeLineSeg3d.h"
 #include "GeLine3d.h"
 #include "DbImpl.h"
@@ -132,6 +133,12 @@ bool DbSolid::subWorldDraw(GiWorldDraw* pWd) const {
 
 Acad::ErrorStatus DbSolid::subGetGeomExtents(DbExtents &extents) const
 {
+	for (int i = 0; i < 4; i++)
+	{
+		GePoint3d pt;
+		this->getPointAt(i, pt);
+		extents.addPoint(pt);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbSolid::subTransformBy(const GeMatrix3d& xform)

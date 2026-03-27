@@ -1,6 +1,11 @@
 #include "DbHatch.h"
 #include "GePlane.h"
 #include "DbImpl.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
+#include "GiWorldDraw.h"
+#include "GiWorldGeometry.h"
+#include <cmath>
 
 
 DbHatch::DbHatch() {
@@ -149,7 +154,94 @@ Acad::ErrorStatus DbHatch::dwgOutFields(DbDwgFiler* pFiler) const {
 	return Acad::ErrorStatus::eOk;
 }
 bool DbHatch::subWorldDraw(GiWorldDraw* pWd) const {
-	return false;
+	int nLoops = this->numLoops();
+	if (nLoops == 0) {
+		return true;
+	}
+
+	// OCS→WCS变换
+	GeVector3d norm = this->normal();
+	double elev = this->elevation();
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(norm);
+
+	// 遍历每个边界环进行绘制
+	for (int li = 0; li < nLoops; li++) {
+		GePoint2dArray vertices;
+		GeDoubleArray bulges;
+		this->getLoopAt(li, vertices, bulges);
+
+		int nVerts = vertices.length();
+		if (nVerts < 2) {
+			continue;
+		}
+
+		// 转换2D顶点到3D
+		GePoint3dArray pts3d;
+		for (int vi = 0; vi < nVerts; vi++) {
+			GePoint3d pt(vertices[vi].x, vertices[vi].y, 0.0);
+			pt.transformBy(mat);
+			pt += norm * elev;
+			pts3d.append(pt);
+		}
+
+		// 绘制每条边 (最后一条边连回起点)
+		for (int vi = 0; vi < nVerts; vi++) {
+			int nextVi = (vi + 1) % nVerts;
+			GePoint3d startPt = pts3d[vi];
+			GePoint3d endPt = pts3d[nextVi];
+
+			double bulge = (vi < bulges.length()) ? bulges[vi] : 0.0;
+
+			if (std::fabs(bulge) < 1e-10) {
+				// 直线段
+				pWd->geometry().line(startPt, endPt);
+			} else {
+				// 弧线段: bulge = tan(includedAngle / 4)
+				double includedAngle = std::atan(bulge) * 4.0;
+				GePoint3d midPt = startPt + (endPt - startPt) * 0.5;
+				double dist = startPt.distanceTo(endPt) * 0.5;
+				if (dist < 1e-10) {
+					continue;
+				}
+				double radius = dist / std::sin(includedAngle * 0.5);
+				if (std::fabs(radius) < 1e-10) {
+					continue;
+				}
+
+				// 通过三点式circularArc绘制
+				GeVector3d chordDir = endPt - startPt;
+				chordDir.normalize();
+				GeVector3d perpDir = chordDir.crossProduct(norm);
+				if (perpDir.length() < 1e-10) {
+					pWd->geometry().line(startPt, endPt);
+					continue;
+				}
+				perpDir.normalize();
+				double sagitta = dist * bulge;
+				GePoint3d arcMidPt = midPt + perpDir * sagitta;
+
+				pWd->geometry().circularArc(startPt, arcMidPt, endPt);
+			}
+		}
+
+		// 实心填充: 用polygon绘制
+		if (this->isSolidFill() && nVerts >= 3) {
+			// 检查边界是否全为直线段(无弧段)
+			bool allStraight = true;
+			for (int vi = 0; vi < nVerts && vi < bulges.length(); vi++) {
+				if (std::fabs(bulges[vi]) > 1e-10) {
+					allStraight = false;
+					break;
+				}
+			}
+			if (allStraight) {
+				pWd->geometry().polygon(nVerts, &pts3d[0]);
+			}
+		}
+	}
+
+	return true;
 }
 
 
@@ -326,12 +418,207 @@ Acad::ErrorStatus DbHatch::appendSeedPoint(const GePoint2d& point) {
 
 // --- Override methods ---
 
-Acad::ErrorStatus DbHatch::subGetGeomExtents(DbExtents& extents) const { return Acad::ErrorStatus::eOk; }
-Acad::ErrorStatus DbHatch::subTransformBy(const GeMatrix3d& xform) { return Acad::ErrorStatus::eOk; }
-Acad::ErrorStatus DbHatch::subGetGripPoints(DbGripDataPtrArray& grips, const double curViewUnitSize, const int gripSize, const GeVector3d& curViewDir, const int bitflags) const { return Acad::ErrorStatus::eOk; }
-Acad::ErrorStatus DbHatch::subGetOsnapPoints(Db::OsnapMode osnapMode, Adesk::GsMarker gsSelectionMark, const GePoint3d& pickPoint, const GePoint3d& lastPoint, const GeMatrix3d& viewXform, GePoint3dArray& snapPoints, DbIntArray& geomIds) const { return Acad::ErrorStatus::eOk; }
-Acad::ErrorStatus DbHatch::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) { return Acad::ErrorStatus::eOk; }
-Acad::ErrorStatus DbHatch::subMoveGripPointsAt(const DbVoidPtrArray& gripAppData, const GeVector3d& offset, const int bitflags) { return Acad::ErrorStatus::eOk; }
+Acad::ErrorStatus DbHatch::subGetGeomExtents(DbExtents& extents) const {
+	GeVector3d norm = this->normal();
+	double elev = this->elevation();
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(norm);
+
+	int nLoops = this->numLoops();
+	for (int li = 0; li < nLoops; li++) {
+		GePoint2dArray vertices;
+		GeDoubleArray bulges;
+		this->getLoopAt(li, vertices, bulges);
+		int nVerts = vertices.length();
+		for (int vi = 0; vi < nVerts; vi++) {
+			GePoint3d pt(vertices[vi].x, vertices[vi].y, 0.0);
+			pt.transformBy(mat);
+			pt += norm * elev;
+			extents.addPoint(pt);
+
+			// 弧线段的弧顶也需要计入
+			double bulge = (vi < bulges.length()) ? bulges[vi] : 0.0;
+			if (std::fabs(bulge) > 1e-10) {
+				int nextVi = (vi + 1) % nVerts;
+				GePoint3d startPt(vertices[vi].x, vertices[vi].y, 0.0);
+				GePoint3d endPt(vertices[nextVi].x, vertices[nextVi].y, 0.0);
+				startPt.transformBy(mat);
+				startPt += norm * elev;
+				endPt.transformBy(mat);
+				endPt += norm * elev;
+				GePoint3d midPt = startPt + (endPt - startPt) * 0.5;
+				GeVector3d chordDir = endPt - startPt;
+				chordDir.normalize();
+				GeVector3d perpDir = chordDir.crossProduct(norm);
+				if (perpDir.length() > 1e-10) {
+					perpDir.normalize();
+					double dist = startPt.distanceTo(endPt) * 0.5;
+					double sagitta = dist * bulge;
+					GePoint3d arcMidPt = midPt + perpDir * sagitta;
+					extents.addPoint(arcMidPt);
+				}
+			}
+		}
+	}
+	return Acad::ErrorStatus::eOk;
+}
+
+Acad::ErrorStatus DbHatch::subTransformBy(const GeMatrix3d& xform) {
+	DbHatchImpl* imp = DB_IMP_HATCH(this->m_pImpl);
+
+	// 变换法向量和原点以确定新的OCS
+	GeVector3d oldNorm = imp->normal;
+	GeMatrix3d oldMat;
+	oldMat.setToPlaneToWorld(oldNorm);
+	GePoint3d ocsOrigin(0, 0, imp->elevation);
+	ocsOrigin.transformBy(oldMat);
+
+	// 变换每个loop的顶点: OCS→WCS→变换→投影回新OCS
+	// 先确定新的法向量
+	GeVector3d newNorm = oldNorm;
+	newNorm.transformBy(xform);
+	newNorm.normalize();
+	imp->normal = newNorm;
+
+	// 新的OCS→WCS逆矩阵
+	GeMatrix3d newMat;
+	newMat.setToPlaneToWorld(newNorm);
+	GeMatrix3d newMatInv = newMat;
+	newMatInv.invert();
+
+	for (int li = 0; li < imp->loops.length(); li++) {
+		DbHatchLoopImpl* loop = imp->loops[li];
+		for (int vi = 0; vi < loop->vertices.length(); vi++) {
+			GePoint3d pt(loop->vertices[vi].x, loop->vertices[vi].y, 0.0);
+			pt.transformBy(oldMat);
+			pt += oldNorm * imp->elevation;
+			pt.transformBy(xform);
+			pt.transformBy(newMatInv);
+			loop->vertices[vi] = GePoint2d(pt.x, pt.y);
+		}
+	}
+
+	// 变换种子点
+	for (int si = 0; si < imp->seedPoints.length(); si++) {
+		GePoint3d pt(imp->seedPoints[si].x, imp->seedPoints[si].y, 0.0);
+		pt.transformBy(oldMat);
+		pt += oldNorm * imp->elevation;
+		pt.transformBy(xform);
+		pt.transformBy(newMatInv);
+		imp->seedPoints[si] = GePoint2d(pt.x, pt.y);
+	}
+
+	// 计算新的elevation
+	GePoint3d elevPt = ocsOrigin;
+	elevPt.transformBy(xform);
+	elevPt.transformBy(newMatInv);
+	imp->elevation = elevPt.z;
+
+	return Acad::ErrorStatus::eOk;
+}
+
+Acad::ErrorStatus DbHatch::subGetGripPoints(DbGripDataPtrArray& grips, const double curViewUnitSize, const int gripSize, const GeVector3d& curViewDir, const int bitflags) const {
+	GeVector3d norm = this->normal();
+	double elev = this->elevation();
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(norm);
+
+	// 种子点作为夹点
+	DbHatchImpl* imp = DB_IMP_HATCH(this->m_pImpl);
+	for (int si = 0; si < imp->seedPoints.length(); si++) {
+		GePoint3d pt(imp->seedPoints[si].x, imp->seedPoints[si].y, 0.0);
+		pt.transformBy(mat);
+		pt += norm * elev;
+		DbGripData* grip = new DbGripData();
+		grip->setGripPoint(pt);
+		grips.append(grip);
+	}
+	return Acad::ErrorStatus::eOk;
+}
+
+Acad::ErrorStatus DbHatch::subGetOsnapPoints(Db::OsnapMode osnapMode, Adesk::GsMarker gsSelectionMark, const GePoint3d& pickPoint, const GePoint3d& lastPoint, const GeMatrix3d& viewXform, GePoint3dArray& snapPoints, DbIntArray& geomIds) const {
+	if (osnapMode != Db::kOsModeEnd && osnapMode != Db::kOsModeNear) {
+		return Acad::ErrorStatus::eOk;
+	}
+
+	GeVector3d norm = this->normal();
+	double elev = this->elevation();
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(norm);
+
+	int nLoops = this->numLoops();
+	for (int li = 0; li < nLoops; li++) {
+		GePoint2dArray vertices;
+		GeDoubleArray bulges;
+		this->getLoopAt(li, vertices, bulges);
+		int nVerts = vertices.length();
+		if (osnapMode == Db::kOsModeEnd) {
+			for (int vi = 0; vi < nVerts; vi++) {
+				GePoint3d pt(vertices[vi].x, vertices[vi].y, 0.0);
+				pt.transformBy(mat);
+				pt += norm * elev;
+				snapPoints.append(pt);
+			}
+		} else if (osnapMode == Db::kOsModeNear) {
+			// 找最近边界点
+			double minDist = 1e300;
+			GePoint3d nearPt;
+			for (int vi = 0; vi < nVerts; vi++) {
+				int nextVi = (vi + 1) % nVerts;
+				GePoint3d p0(vertices[vi].x, vertices[vi].y, 0.0);
+				GePoint3d p1(vertices[nextVi].x, vertices[nextVi].y, 0.0);
+				p0.transformBy(mat);
+				p0 += norm * elev;
+				p1.transformBy(mat);
+				p1 += norm * elev;
+				// 投影到线段上
+				GeVector3d seg = p1 - p0;
+				double len = seg.length();
+				if (len < 1e-10) continue;
+				double t = (pickPoint - p0).dotProduct(seg) / (len * len);
+				if (t < 0.0) t = 0.0;
+				if (t > 1.0) t = 1.0;
+				GePoint3d proj = p0 + seg * t;
+				double d = pickPoint.distanceTo(proj);
+				if (d < minDist) {
+					minDist = d;
+					nearPt = proj;
+				}
+			}
+			if (minDist < 1e300) {
+				snapPoints.append(nearPt);
+			}
+		}
+	}
+	return Acad::ErrorStatus::eOk;
+}
+
+Acad::ErrorStatus DbHatch::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) {
+	DbHatchImpl* imp = DB_IMP_HATCH(this->m_pImpl);
+	GeVector3d norm = imp->normal;
+	GeMatrix3d mat;
+	mat.setToPlaneToWorld(norm);
+	GeMatrix3d matInv = mat;
+	matInv.invert();
+
+	for (int i = 0; i < indices.length(); i++) {
+		int idx = indices[i];
+		if (idx >= 0 && idx < imp->seedPoints.length()) {
+			GePoint3d pt(imp->seedPoints[idx].x, imp->seedPoints[idx].y, 0.0);
+			pt.transformBy(mat);
+			pt += norm * imp->elevation;
+			pt += offset;
+			pt.transformBy(matInv);
+			imp->seedPoints[idx] = GePoint2d(pt.x, pt.y);
+		}
+	}
+	return Acad::ErrorStatus::eOk;
+}
+
+Acad::ErrorStatus DbHatch::subMoveGripPointsAt(const DbVoidPtrArray& gripAppData, const GeVector3d& offset, const int bitflags) {
+	return Acad::ErrorStatus::eOk;
+}
+
 Acad::ErrorStatus DbHatch::subIntersectWith(const DbEntity* pEnt, Db::Intersect intType, GePoint3dArray& points, Adesk::GsMarker thisGsMarker, Adesk::GsMarker otherGsMarker) const {
 	if (pEnt == NULL) { return Acad::ErrorStatus::eFail; }
 	return Acad::ErrorStatus::eOk;

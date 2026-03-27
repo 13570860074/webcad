@@ -1,6 +1,8 @@
 #include "DbPoint.h"
 #include "GiWorldDraw.h"
 #include "GiWorldGeometry.h"
+#include "DbExtents.h"
+#include "GePlane.h"
 #include "DbImpl.h"
 
 
@@ -62,7 +64,9 @@ Acad::ErrorStatus DbPoint::setEcsRotation(double _ecsRotation) {
 	return Acad::ErrorStatus::eFail;
 }
 
-Acad::ErrorStatus DbPoint::getPlane(GePlane&, Db::Planarity&) const  {
+Acad::ErrorStatus DbPoint::getPlane(GePlane& plane, Db::Planarity& planarity) const  {
+	plane.set(this->position(), this->normal());
+	planarity = Db::Planarity::kPlanar;
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -124,6 +128,7 @@ bool DbPoint::subWorldDraw(GiWorldDraw* pWd) const
 
 Acad::ErrorStatus DbPoint::subGetGeomExtents(DbExtents &extents) const
 {
+	extents.addPoint(this->position());
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbPoint::subTransformBy(const GeMatrix3d& xform)
@@ -156,21 +161,17 @@ Acad::ErrorStatus DbPoint::subGetOsnapPoints(
 	DbIntArray& geomIds) const
 {
 
-	if (osnapMode == Db::OsnapMode::kOsModeNear)
+	if (osnapMode == Db::OsnapMode::kOsModeNode)
 	{
-	
+		snapPoints.append(this->position());
 	}
-	else if (osnapMode == Db::OsnapMode::kOsModeMid)
+	else if (osnapMode == Db::OsnapMode::kOsModeNear)
 	{
-
+		snapPoints.append(this->position());
 	}
 	else if (osnapMode == Db::OsnapMode::kOsModeEnd)
 	{
-
-	}
-	else if (osnapMode == Db::OsnapMode::kOsModePerp)
-	{
-
+		snapPoints.append(this->position());
 	}
 
 	return Acad::ErrorStatus::eOk;

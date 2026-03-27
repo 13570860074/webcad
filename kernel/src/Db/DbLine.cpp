@@ -25,7 +25,8 @@ DbLine::DbLine()
 DbLine::DbLine(const GePoint3d &start, const GePoint3d &end)
 {
 	this->m_pImpl = new DbLineImpl();
-
+	DB_IMP_LINE(this->m_pImpl)->startPoint = start;
+	DB_IMP_LINE(this->m_pImpl)->endPoint = end;
 }
 DbLine::~DbLine()
 {
@@ -415,7 +416,8 @@ Acad::ErrorStatus DbLine::getParamAtDist(double dist, double &param) const
 Acad::ErrorStatus DbLine::getDistAtPoint(const GePoint3d &point, double &dist) const
 {
 	GeLineSeg3d line(this->startPoint(), this->endPoint());
-	dist = line.distanceTo(point);
+	double param = line.paramOf(point);
+	dist = fabs(param);
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbLine::getPointAtDist(double dist, GePoint3d &point) const
@@ -424,21 +426,31 @@ Acad::ErrorStatus DbLine::getPointAtDist(double dist, GePoint3d &point) const
 	point = line.evalPoint(dist);
 	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbLine::getFirstDeriv(double, GeVector3d &) const
+Acad::ErrorStatus DbLine::getFirstDeriv(double param, GeVector3d &firstDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	GeVector3d dir = this->endPoint() - this->startPoint();
+	double len = dir.length();
+	if (len < 1e-10) return Acad::ErrorStatus::eFail;
+	firstDeriv = dir.normalize();
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbLine::getFirstDeriv(const GePoint3d &, GeVector3d &) const
+Acad::ErrorStatus DbLine::getFirstDeriv(const GePoint3d &point, GeVector3d &firstDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	GeVector3d dir = this->endPoint() - this->startPoint();
+	double len = dir.length();
+	if (len < 1e-10) return Acad::ErrorStatus::eFail;
+	firstDeriv = dir.normalize();
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbLine::getSecondDeriv(double, GeVector3d &) const
+Acad::ErrorStatus DbLine::getSecondDeriv(double param, GeVector3d &secDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	secDeriv = GeVector3d(0, 0, 0);
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbLine::getSecondDeriv(const GePoint3d &, GeVector3d &) const
+Acad::ErrorStatus DbLine::getSecondDeriv(const GePoint3d &point, GeVector3d &secDeriv) const
 {
-	return Acad::ErrorStatus::eFail;
+	secDeriv = GeVector3d(0, 0, 0);
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbLine::getClosestPointTo(const GePoint3d &point, GePoint3d &closest, bool) const
 {
@@ -474,28 +486,81 @@ Acad::ErrorStatus DbLine::getProjectedCurve(const GePlane &plane, const GeVector
 }
 Acad::ErrorStatus DbLine::getOffsetCurves(double v, DbVoidPtrArray &curves) const
 {
-
-	return Acad::ErrorStatus::eFail;
+	GeVector3d normal(0, 0, 1);
+	return this->getOffsetCurvesGivenPlaneNormal(normal, v, curves);
 }
 Acad::ErrorStatus DbLine::getSpline(DbSpline *&) const
 {
 	return Acad::ErrorStatus::eFail;
 }
-Acad::ErrorStatus DbLine::getSplitCurves(const GeDoubleArray &, DbVoidPtrArray &curveSegments) const
+Acad::ErrorStatus DbLine::getSplitCurves(const GeDoubleArray &params, DbVoidPtrArray &curveSegments) const
 {
-	return Acad::ErrorStatus::eFail;
+	if (params.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+
+	GeDoubleArray sortedParams;
+	for (int i = 0; i < params.length(); i++)
+		sortedParams.append(params[i]);
+	for (int i = 0; i < sortedParams.length() - 1; i++)
+		for (int j = i + 1; j < sortedParams.length(); j++)
+			if (sortedParams[i] > sortedParams[j])
+			{
+				double t = sortedParams[i];
+				sortedParams[i] = sortedParams[j];
+				sortedParams[j] = t;
+			}
+
+	GePoint3d prevPt = this->startPoint();
+	for (int i = 0; i < sortedParams.length(); i++)
+	{
+		GePoint3d pt;
+		this->getPointAtParam(sortedParams[i], pt);
+		DbLine *seg = new DbLine();
+		seg->setStartPoint(prevPt);
+		seg->setEndPoint(pt);
+		curveSegments.append(seg);
+		prevPt = pt;
+	}
+	DbLine *seg = new DbLine();
+	seg->setStartPoint(prevPt);
+	seg->setEndPoint(this->endPoint());
+	curveSegments.append(seg);
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbLine::getSplitCurves(const GePoint3dArray &, DbVoidPtrArray &) const
+Acad::ErrorStatus DbLine::getSplitCurves(const GePoint3dArray &points, DbVoidPtrArray &curveSegments) const
 {
-	return Acad::ErrorStatus::eFail;
+	if (points.length() == 0)
+		return Acad::ErrorStatus::eInvalidInput;
+	GeDoubleArray params;
+	for (int i = 0; i < points.length(); i++)
+	{
+		double p;
+		this->getParamAtPoint(points[i], p);
+		params.append(p);
+	}
+	return this->getSplitCurves(params, curveSegments);
 }
-Acad::ErrorStatus DbLine::extend(double)
+Acad::ErrorStatus DbLine::extend(double newParam)
 {
-	return Acad::ErrorStatus::eFail;
+	GePoint3d pt;
+	this->getPointAtParam(newParam, pt);
+	double endParam = 0.0;
+	this->getEndParam(endParam);
+	if (newParam > endParam)
+		DB_IMP_LINE(this->m_pImpl)->endPoint = pt;
+	else
+		DB_IMP_LINE(this->m_pImpl)->startPoint = pt;
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbLine::extend(bool, const GePoint3d &)
+Acad::ErrorStatus DbLine::extend(bool extendStart, const GePoint3d &toPoint)
 {
-	return Acad::ErrorStatus::eFail;
+	GeLine3d line(this->startPoint(), this->endPoint() - this->startPoint());
+	GePoint3d proj = line.closestPointTo(toPoint);
+	if (extendStart)
+		DB_IMP_LINE(this->m_pImpl)->startPoint = proj;
+	else
+		DB_IMP_LINE(this->m_pImpl)->endPoint = proj;
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbLine::getArea(double &area) const
 {
@@ -504,7 +569,11 @@ Acad::ErrorStatus DbLine::getArea(double &area) const
 }
 Acad::ErrorStatus DbLine::reverseCurve()
 {
-	return Acad::ErrorStatus::eFail;
+	GePoint3d s = this->startPoint();
+	GePoint3d e = this->endPoint();
+	DB_IMP_LINE(this->m_pImpl)->startPoint = e;
+	DB_IMP_LINE(this->m_pImpl)->endPoint = s;
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbLine::getGeCurve(GeCurve3d *&pGeCurve, const GeTol &tol) const
 {

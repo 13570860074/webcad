@@ -9,6 +9,7 @@
 #include "GeRay3d.h"
 #include "GeLine3d.h"
 #include "GeCircArc3d.h"
+#include "GePlane.h"
 #include "DbImpl.h"
 #include "DbOsnapPointCompute.h"
 
@@ -283,7 +284,8 @@ bool DbRay::isPlanar() const
 }
 Acad::ErrorStatus DbRay::getPlane(GePlane& plane, Db::Planarity& planarity) const
 {
-
+	plane = GePlane(this->basePoint(), this->unitDir());
+	planarity = Db::Planarity::kLinear;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getStartParam(double& _v) const
@@ -293,23 +295,26 @@ Acad::ErrorStatus DbRay::getStartParam(double& _v) const
 }
 Acad::ErrorStatus DbRay::getEndParam(double& _v) const
 {
-
+	_v = 1e100;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getStartPoint(GePoint3d& _v) const
 {
+	_v = this->basePoint();
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getEndPoint(GePoint3d& _v) const
 {
-	return Acad::ErrorStatus::eOk;
+	return Acad::ErrorStatus::eNotApplicable;
 }
 Acad::ErrorStatus DbRay::getPointAtParam(double param, GePoint3d& point) const
 {
+	point = this->basePoint() + this->unitDir() * param;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getParamAtPoint(const GePoint3d& point, double& param) const {
-
+	GeVector3d v = point - this->basePoint();
+	param = v.dotProduct(this->unitDir());
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getDistAtParam(double param, double& dist) const {
@@ -321,38 +326,53 @@ Acad::ErrorStatus DbRay::getParamAtDist(double dist, double& param) const {
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getDistAtPoint(const GePoint3d& point, double& dist) const {
-
+	GeVector3d v = point - this->basePoint();
+	dist = fabs(v.dotProduct(this->unitDir()));
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getPointAtDist(double dist, GePoint3d& point) const {
-
+	point = this->basePoint() + this->unitDir() * dist;
 	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbRay::getFirstDeriv(double, GeVector3d&) const {
-	return Acad::ErrorStatus::eFail;
+Acad::ErrorStatus DbRay::getFirstDeriv(double, GeVector3d& firstDeriv) const {
+	firstDeriv = this->unitDir();
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbRay::getFirstDeriv(const GePoint3d&, GeVector3d&) const {
-	return Acad::ErrorStatus::eFail;
+Acad::ErrorStatus DbRay::getFirstDeriv(const GePoint3d&, GeVector3d& firstDeriv) const {
+	firstDeriv = this->unitDir();
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbRay::getSecondDeriv(double, GeVector3d&) const {
-	return Acad::ErrorStatus::eFail;
+Acad::ErrorStatus DbRay::getSecondDeriv(double, GeVector3d& secDeriv) const {
+	secDeriv = GeVector3d(0, 0, 0);
+	return Acad::ErrorStatus::eOk;
 }
-Acad::ErrorStatus DbRay::getSecondDeriv(const GePoint3d&, GeVector3d&) const {
-	return Acad::ErrorStatus::eFail;
+Acad::ErrorStatus DbRay::getSecondDeriv(const GePoint3d&, GeVector3d& secDeriv) const {
+	secDeriv = GeVector3d(0, 0, 0);
+	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getClosestPointTo(const GePoint3d& point, GePoint3d& closest, bool) const {
-
+	GeRay3d ray(this->basePoint(), this->unitDir());
+	closest = ray.closestPointTo(point);
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getClosestPointTo(const GePoint3d& point, const GeVector3d& projectDirection, GePoint3d& closest, bool) const {
-
+	GeRay3d ray(this->basePoint(), this->unitDir());
+	closest = ray.projClosestPointTo(point, projectDirection);
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getOrthoProjectedCurve(const GePlane& plane, DbCurve*& curve) const {
-	return Acad::ErrorStatus::eOk;
+	return this->getProjectedCurve(plane, plane.normal(), curve);
 }
 Acad::ErrorStatus DbRay::getProjectedCurve(const GePlane& plane, const GeVector3d& normal, DbCurve*& curve) const {
-
+	GePoint3d p1 = this->basePoint().project(plane, normal);
+	GePoint3d p2 = (this->basePoint() + this->unitDir()).project(plane, normal);
+	GeVector3d dir = p2 - p1;
+	if (dir.length() < 1e-10)
+		return Acad::ErrorStatus::eFail;
+	DbRay* pRay = new DbRay();
+	pRay->setBasePoint(p1);
+	pRay->setUnitDir(dir.normalize());
+	curve = pRay;
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::getOffsetCurves(double v, DbVoidPtrArray& curves) const {
@@ -379,9 +399,10 @@ Acad::ErrorStatus DbRay::getArea(double& area) const {
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::reverseCurve() {
-	return Acad::ErrorStatus::eFail;
+	return Acad::ErrorStatus::eNotApplicable;
 }
 Acad::ErrorStatus DbRay::getGeCurve(GeCurve3d*& pGeCurve, const GeTol& tol) const {
+	pGeCurve = new GeRay3d(this->basePoint(), this->unitDir());
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbRay::setFromGeCurve(const GeCurve3d& geCurve, GeVector3d* normal, const GeTol& tol) {

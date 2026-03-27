@@ -6,7 +6,10 @@
 #include "DbTextStyleTableRecord.h"
 #include "GiTextStyle.h"
 #include "kernel.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
 #include "DbImpl.h"
+#include <cmath>
 
 
 DbText::DbText() {
@@ -637,4 +640,99 @@ Acad::ErrorStatus DbText::setJustification(AcTextAlignment _textAlignment) {
         return Acad::ErrorStatus::eOk;
     }
     return Acad::ErrorStatus::eFail;
+}
+
+Acad::ErrorStatus DbText::subGetGeomExtents(DbExtents& extents) const {
+	GePoint3d pos = this->position();
+	double h = this->height();
+	double rot = this->rotation();
+	// 估算文字宽度
+	const ACHAR* str = this->textStringConst();
+	int len = 0;
+	if (str) {
+		while (str[len] != 0) len++;
+	}
+	double w = h * this->widthFactor() * len * 0.6;
+
+	// 计算4个角点
+	double cosR = cos(rot);
+	double sinR = sin(rot);
+	GeVector3d dirX(cosR, sinR, 0.0);
+	GeVector3d dirY(-sinR, cosR, 0.0);
+
+	// 根据对齐方式调整基点
+	GePoint3d base = pos;
+	if (this->justification() != AcTextAlignment::kTextAlignmentLeft) {
+		GePoint3d ap = this->alignmentPoint();
+		if (ap.x != 0.0 || ap.y != 0.0 || ap.z != 0.0) {
+			base = ap;
+		}
+	}
+
+	GePoint3d corners[4];
+	corners[0] = base;
+	corners[1] = base + dirX * w;
+	corners[2] = base + dirX * w + dirY * h;
+	corners[3] = base + dirY * h;
+	for (int i = 0; i < 4; i++) {
+		extents.addPoint(corners[i]);
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbText::subTransformBy(const GeMatrix3d& xform) {
+	DbTextImpl* imp = DB_IMP_TEXT(this->m_pImpl);
+	imp->position.transformBy(xform);
+	imp->alignmentPoint.transformBy(xform);
+	imp->normal.transformBy(xform);
+	imp->normal.normalize();
+	// 提取旋转角度变化
+	GeVector3d xDir(cos(imp->rotation), sin(imp->rotation), 0.0);
+	xDir.transformBy(xform);
+	imp->rotation = atan2(xDir.y, xDir.x);
+	// 提取缩放
+	GeVector3d unitX(1.0, 0.0, 0.0);
+	unitX.transformBy(xform);
+	double scale = unitX.length();
+	if (scale > 1e-14) {
+		imp->height *= scale;
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbText::subGetGripPoints(DbGripDataPtrArray& grips, const double curViewUnitSize, const int gripSize, const GeVector3d& curViewDir, const int bitflags) const {
+	DbGripData* grip1 = new DbGripData();
+	grip1->setGripPoint(this->position());
+	grips.append(grip1);
+	if (this->justification() != AcTextAlignment::kTextAlignmentLeft) {
+		GePoint3d ap = this->alignmentPoint();
+		if (ap.x != 0.0 || ap.y != 0.0 || ap.z != 0.0) {
+			DbGripData* grip2 = new DbGripData();
+			grip2->setGripPoint(ap);
+			grips.append(grip2);
+		}
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbText::subGetOsnapPoints(Db::OsnapMode osnapMode, Adesk::GsMarker gsSelectionMark, const GePoint3d& pickPoint, const GePoint3d& lastPoint, const GeMatrix3d& viewXform, GePoint3dArray& snapPoints, DbIntArray& geomIds) const {
+	if (osnapMode == Db::OsnapMode::kOsModeIns) {
+		snapPoints.append(this->position());
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbText::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) {
+	DbTextImpl* imp = DB_IMP_TEXT(this->m_pImpl);
+	for (int i = 0; i < indices.length(); i++) {
+		if (indices[i] == 0) {
+			imp->position += offset;
+			imp->alignmentPoint += offset;
+		} else if (indices[i] == 1) {
+			imp->alignmentPoint += offset;
+		}
+	}
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbText::subMoveGripPointsAt(const DbVoidPtrArray& gripAppData, const GeVector3d& offset, const int bitflags) {
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbText::subIntersectWith(const DbEntity* pEnt, Db::Intersect intType, GePoint3dArray& points, Adesk::GsMarker thisGsMarker, Adesk::GsMarker otherGsMarker) const {
+	return Acad::ErrorStatus::eOk;
 }

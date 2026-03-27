@@ -2,6 +2,12 @@
 #include "GeMatrix3d.h"
 #include "DbObjectId.h"
 #include "DbImpl.h"
+#include "DbExtents.h"
+#include "DbGripData.h"
+#include "GiWorldDraw.h"
+#include "GiWorldGeometry.h"
+#include <cmath>
+#include <cstdio>
 
 
 DbOrdinateDimension::DbOrdinateDimension() {
@@ -156,17 +162,57 @@ Acad::ErrorStatus DbOrdinateDimension::dwgOutFields(DbDwgFiler* pFiler) const {
 	return Acad::ErrorStatus::eOk;
 }
 bool DbOrdinateDimension::subWorldDraw(GiWorldDraw* pWd) const {
-	return DbDimension::subWorldDraw(pWd);
+	GePoint3d orig = this->origin();
+	GePoint3d defPt = this->definingPoint();
+	GePoint3d endPt = this->leaderEndPoint();
+
+	double scale = this->dimscale();
+	if (scale < 1e-10) scale = 1.0;
+	double txt = this->dimtxt() * scale;
+
+	GeVector3d normal = this->normal();
+	if (normal.length() < 1e-10) normal = GeVector3d::kZAxis;
+
+	// 引线: 从定义点到引线端点
+	pWd->geometry().line(defPt, endPt);
+
+	// 坐标值文字
+	double value = 0.0;
+	if (this->isUsingXAxis()) {
+		value = defPt.x - orig.x;
+	} else {
+		value = defPt.y - orig.y;
+	}
+	char buf[64];
+	snprintf(buf, sizeof(buf), "%.2f", value);
+
+	GeVector3d textDir = endPt - defPt;
+	if (textDir.length() < 1e-10) textDir = GeVector3d::kXAxis;
+	textDir.normalize();
+	pWd->geometry().text(endPt, normal, textDir, txt, 1.0, 0.0, buf);
+
+	return true;
 }
 
 
 
 Acad::ErrorStatus DbOrdinateDimension::subGetGeomExtents(DbExtents &extents) const
 {
+	auto* imp = DB_IMP_ORDINATEDIMENSION(this->m_pImpl);
+	extents.addPoint(imp->origin);
+	extents.addPoint(imp->definingPoint);
+	extents.addPoint(imp->leaderEndPoint);
+	extents.addPoint(DB_IMP_DIMENSION(this->m_pImpl)->textPosition);
 	return Acad::ErrorStatus::eOk;
 }
 Acad::ErrorStatus DbOrdinateDimension::subTransformBy(const GeMatrix3d& xform) {
-
+	auto* imp = DB_IMP_ORDINATEDIMENSION(this->m_pImpl);
+	imp->origin.transformBy(xform);
+	imp->definingPoint.transformBy(xform);
+	imp->leaderEndPoint.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->textPosition.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->normal.transformBy(xform);
+	DB_IMP_DIMENSION(this->m_pImpl)->normal.normalize();
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -176,9 +222,13 @@ Acad::ErrorStatus DbOrdinateDimension::subGetGripPoints(
 	const int gripSize,
 	const GeVector3d& curViewDir,
 	const int bitflags) const {
-
-
-
+	auto* imp = DB_IMP_ORDINATEDIMENSION(this->m_pImpl);
+	GePoint3d pts[] = { imp->origin, imp->definingPoint, imp->leaderEndPoint, DB_IMP_DIMENSION(this->m_pImpl)->textPosition };
+	for (int i = 0; i < 4; i++) {
+		DbGripData* grip = new DbGripData();
+		grip->setGripPoint(pts[i]);
+		grips.append(grip);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
@@ -190,13 +240,24 @@ Acad::ErrorStatus DbOrdinateDimension::subGetOsnapPoints(
 	const GeMatrix3d& viewXform,
 	GePoint3dArray& snapPoints,
 	DbIntArray& geomIds) const {
-
+	if (osnapMode == Db::kOsModeEnd) {
+		auto* imp = DB_IMP_ORDINATEDIMENSION(this->m_pImpl);
+		snapPoints.append(imp->definingPoint);
+		snapPoints.append(imp->leaderEndPoint);
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
 Acad::ErrorStatus DbOrdinateDimension::subMoveGripPointsAt(const DbIntArray& indices, const GeVector3d& offset) {
-
-
+	auto* imp = DB_IMP_ORDINATEDIMENSION(this->m_pImpl);
+	for (int i = 0; i < indices.length(); i++) {
+		switch (indices[i]) {
+			case 0: imp->origin += offset; break;
+			case 1: imp->definingPoint += offset; break;
+			case 2: imp->leaderEndPoint += offset; break;
+			case 3: DB_IMP_DIMENSION(this->m_pImpl)->textPosition += offset; break;
+		}
+	}
 	return Acad::ErrorStatus::eOk;
 }
 
