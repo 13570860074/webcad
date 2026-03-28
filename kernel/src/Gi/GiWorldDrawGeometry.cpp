@@ -111,9 +111,14 @@ void GiWorldDrawGeometry::removeWorldGeometryStakes() {
 	realloc_arry_all(GI_IMP_WORLDDRAWGEOMETRY(this->m_pImpl)->worldGeometryStakes);
 }
 
+void GiWorldDrawGeometry::removeWorldGeometryStakesOnly() {
+	GI_IMP_WORLDDRAWGEOMETRY(this->m_pImpl)->worldGeometryStakes.removeAll();
+}
+
 void GiWorldDrawGeometry::drawPoint(const GiMaterial* pMaterial, const GiEntityTraits* entityTraits, const GePoint3d& point) const
 {
-	GiPointGeometry* pPointGeometry = new GiPointGeometry();
+	GiGeometryPool* pool = ::kernel()->acgiEntityManager()->pool();
+	GiPointGeometry* pPointGeometry = pool->acquirePoint();
 	GePoint3d position = point;
 
 	// 应用模型变换
@@ -130,7 +135,7 @@ void GiWorldDrawGeometry::drawPoint(const GiMaterial* pMaterial, const GiEntityT
 	pPointGeometry->setPosition(position);
 	pPointGeometry->setStake(entityTraits->stake());
 
-	GiWorldGeometryStake* stake = new GiWorldGeometryStake();
+	GiWorldGeometryStake* stake = pool->acquireStake();
 	stake->setGeometry(pPointGeometry);
 	stake->setMaterial((GiMaterial*)pMaterial);
 	GI_IMP_WORLDDRAWGEOMETRY(this->m_pImpl)->worldGeometryStakes.append(stake);
@@ -139,7 +144,8 @@ void GiWorldDrawGeometry::drawPoint(const GiMaterial* pMaterial, const GiEntityT
 }
 void GiWorldDrawGeometry::drawLine(const GiMaterial* pMaterial, const GiEntityTraits* entityTraits, const GePoint3d& _startPoint, const GePoint3d& _endPoint) const
 {
-	GiLineSegmentGeometry* pLineSegmentGeometry = new GiLineSegmentGeometry();
+	GiGeometryPool* pool = ::kernel()->acgiEntityManager()->pool();
+	GiLineSegmentGeometry* pLineSegmentGeometry = pool->acquireLineSegment();
 	GePoint3d p1 = _startPoint;
 	GePoint3d p2 = _endPoint;
 
@@ -161,7 +167,7 @@ void GiWorldDrawGeometry::drawLine(const GiMaterial* pMaterial, const GiEntityTr
 	pLineSegmentGeometry->setEndPoint(p2);
 	pLineSegmentGeometry->setStake(entityTraits->stake());
 
-	GiWorldGeometryStake* stake = new GiWorldGeometryStake();
+	GiWorldGeometryStake* stake = pool->acquireStake();
 	stake->setGeometry(pLineSegmentGeometry);
 	stake->setMaterial((GiMaterial*)pMaterial);
 	GI_IMP_WORLDDRAWGEOMETRY(this->m_pImpl)->worldGeometryStakes.append(stake);
@@ -175,10 +181,11 @@ void GiWorldDrawGeometry::drawFace(const GiMaterial* pMaterial, const GiEntityTr
 	int stackLen = GI_IMP_WORLDDRAWGEOMETRY(this->m_pImpl)->modelTransformStack.length();
 	bool hasModelXform = stackLen > 0;
 	bool hasEntityXform = entityTraits->isOpenMatrix3d();
+	GiGeometryPool* pool = ::kernel()->acgiEntityManager()->pool();
 
 	for (int i = 2; i < verts.length(); i++)
 	{
-		GiTriangleMeshGeometry* pTriangleMeshGeometry = new GiTriangleMeshGeometry();
+		GiTriangleMeshGeometry* pTriangleMeshGeometry = pool->acquireTriangleMesh();
 		GePoint3d p1 = verts.at(i - 2);
 		GePoint3d p2 = verts.at(i - 1);
 		GePoint3d p3 = verts.at(i);
@@ -204,7 +211,7 @@ void GiWorldDrawGeometry::drawFace(const GiMaterial* pMaterial, const GiEntityTr
 
 		pTriangleMeshGeometry->setStake(entityTraits->stake());
 
-		GiWorldGeometryStake* stake = new GiWorldGeometryStake();
+		GiWorldGeometryStake* stake = pool->acquireStake();
 		stake->setGeometry(pTriangleMeshGeometry);
 		stake->setMaterial((GiMaterial*)pMaterial);
 		GI_IMP_WORLDDRAWGEOMETRY(this->m_pImpl)->worldGeometryStakes.append(stake);

@@ -3,6 +3,9 @@
 #include "GiEntityReactor.h"
 #include "GiEntityManager.h"
 #include "GiLineSegmentGeometry.h"
+#include "GiTriangleMeshGeometry.h"
+#include "GiPointGeometry.h"
+#include "GiGeometryPool.h"
 #include "GiImpl.h"
 
 GiEntity::GiEntity()
@@ -50,20 +53,28 @@ void GiEntity::clear()
 }
 void GiEntity::update()
 {
-	AcArray<GiEntityGeometry*> entitys;
-	for (int i = GI_IMP_ENTITY(this->m_pImpl)->geometrys.length() - 1; i >= 0; i--) {
-		if (GI_IMP_ENTITY(this->m_pImpl)->geometrys[i]->isErased() == true) {
-			GiEntityGeometry* temp = GI_IMP_ENTITY(this->m_pImpl)->geometrys[i];
-			delete temp;
-			continue;
+	GiGeometryPool* pool = ::kernel()->acgiEntityManager()->pool();
+	AcArray<GiEntityGeometry*>& geoms = GI_IMP_ENTITY(this->m_pImpl)->geometrys;
+	int writeIdx = 0;
+	for (int i = 0; i < geoms.length(); i++) {
+		GiEntityGeometry* g = geoms[i];
+		if (g->isErased()) {
+			Gi::EntityGeometryType t = g->type();
+			if (t == Gi::EntityGeometryType::kLineSegmentGeometry)
+				pool->releaseLineSegment((GiLineSegmentGeometry*)g);
+			else if (t == Gi::EntityGeometryType::kTriangleMeshGeometry)
+				pool->releaseTriangleMesh((GiTriangleMeshGeometry*)g);
+			else if (t == Gi::EntityGeometryType::kPointGeometry)
+				pool->releasePoint((GiPointGeometry*)g);
+			else
+				delete g;
+		} else {
+			geoms[writeIdx++] = g;
 		}
-		entitys.append(GI_IMP_ENTITY(this->m_pImpl)->geometrys[i]);
 	}
-
-	GI_IMP_ENTITY(this->m_pImpl)->geometrys.removeAll();
-	for (int i = 0; i < entitys.length(); i++) {
-		GI_IMP_ENTITY(this->m_pImpl)->geometrys.append(entitys[i]);
-	}
+	// 移除尾部已释放的槽位
+	while (geoms.length() > writeIdx)
+		geoms.removeAt(geoms.length() - 1);
 }
 unsigned int GiEntity::numGeometrys() const
 {

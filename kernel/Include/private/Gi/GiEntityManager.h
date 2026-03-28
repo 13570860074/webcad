@@ -13,6 +13,7 @@ class GiEntity;
 class ApDocument;
 class GiEntityReactor;
 class GiEntityIterator;
+class GiGeometryPool;
 class GiEntityManager : public RxObject, public RxManager
 {
 public:
@@ -50,6 +51,9 @@ public:
 
 	/* 实体线程锁 */
 	GiEntityMutex* mutex();
+
+	/* 几何对象池 */
+	GiGeometryPool* pool();
 };
 
 #endif

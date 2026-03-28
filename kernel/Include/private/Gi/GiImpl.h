@@ -20,6 +20,7 @@
 #include "GiMaterialReactor.h"
 #include "GiEntityReactor.h"
 #include "GiEntityGeometry.h"
+#include "GiEntityManager.h"
 #include "GiWorldGeometryStake.h"
 #include "GiWorldDrawGeometry.h"
 #include "GiTriangleMeshGeometry.h"
@@ -27,6 +28,7 @@
 #include "GiGeometryExtentView.h"
 #include "GiEntityGeometryStake.h"
 #include "GiEntityHighlander.h"
+#include "GiGeometryPool.h"
 #include "PAL/api/charset.h"
 #include <atomic>
 
@@ -334,9 +336,12 @@ public:
 	{
 		this->entityMutex = new GiEntityMutex();
 		this->entityIndexs = new GiEntityIndexPointerTypeArray();
+		this->geometryPool = new GiGeometryPool();
 	}
 	virtual ~GiEntityManagerImpl()
 	{
+		delete this->geometryPool;
+		this->geometryPool = NULL;
 	}
 
 	GiEntityMutex* entityMutex;
@@ -345,6 +350,7 @@ public:
 	AcArray<GiEntityReactor*> entityReactors;
 
 	GiEntityIndexPointerTypeArray* entityIndexs;
+	GiGeometryPool* geometryPool;
 };
 
 /** -------------------------------------------------------------------- */

@@ -60,3 +60,10 @@ void DbXrecord::setMergeStyle(Db::DuplicateRecordCloning style){
 	DB_IMP_XRECORD(this->m_pImpl)->mergeStyle = style;
 }
 
+Acad::ErrorStatus DbXrecord::dwgInFields(DbDwgFiler* /*pFiler*/) {
+	return Acad::ErrorStatus::eOk;
+}
+Acad::ErrorStatus DbXrecord::dwgOutFields(DbDwgFiler* /*pFiler*/) const {
+	return Acad::ErrorStatus::eOk;
+}
+

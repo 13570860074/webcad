@@ -69,7 +69,7 @@ double* GiLineSegment::vertexs()
 
 GiLineSegmentGeometry* GiLineSegment::appendLineSegment(const GePoint3d& _startPoint, const GePoint3d& _endPoint)
 {
-	GiLineSegmentGeometry* pLineSegmentGeometry = new GiLineSegmentGeometry();
+	GiLineSegmentGeometry* pLineSegmentGeometry = ::kernel()->acgiEntityManager()->pool()->acquireLineSegment();
 	pLineSegmentGeometry->setStartPoint(_startPoint);
 	pLineSegmentGeometry->setEndPoint(_endPoint);
 
@@ -102,7 +102,7 @@ void GiLineSegment::appendCircle(int numSegments, const GePoint3d& _center, cons
 	for (int i = 1; i < points.length(); i++)
 	{
 		// 创建几何线段
-		GiLineSegmentGeometry* pLineSegmentGeometry = new GiLineSegmentGeometry();
+		GiLineSegmentGeometry* pLineSegmentGeometry = ::kernel()->acgiEntityManager()->pool()->acquireLineSegment();
 		pLineSegmentGeometry->setStartPoint(points[i - 1]);
 		pLineSegmentGeometry->setEndPoint(points[i]);
 
@@ -119,7 +119,7 @@ void GiLineSegment::appendArc(int numSegments, const GePoint3d& _center, const d
 	for (int i = 1; i < points.length(); i++)
 	{
 		// 创建几何线段
-		GiLineSegmentGeometry* pLineSegmentGeometry = new GiLineSegmentGeometry();
+		GiLineSegmentGeometry* pLineSegmentGeometry = ::kernel()->acgiEntityManager()->pool()->acquireLineSegment();
 		pLineSegmentGeometry->setStartPoint(points[i - 1]);
 		pLineSegmentGeometry->setEndPoint(points[i]);
 

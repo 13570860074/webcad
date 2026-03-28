@@ -26,6 +26,9 @@ public:
 
     GiEntityGeometry* geometry()const;
     void setGeometry(GiEntityGeometry* g);
+
+    /** 归还对象池前重置状态 */
+    void poolReset();
 };
 
 #endif

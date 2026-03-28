@@ -31,3 +31,10 @@ GiEntityGeometry* GiWorldGeometryStake::geometry()const {
 void GiWorldGeometryStake::setGeometry(GiEntityGeometry* g) {
 	this->m_geometry = g;
 }
+
+void GiWorldGeometryStake::poolReset()
+{
+	this->m_entity   = NULL;
+	this->m_geometry = NULL;
+	this->m_material = NULL;
+}

@@ -144,6 +144,7 @@ void GiEntDraw::draw()
 		{
 			AcArray<GiWorldGeometryStake*> worldGeometryStake;
 			GI_IMP_ENTDRAW(this->m_pImpl)->pWorldGeometry->worldGeometryStakes(worldGeometryStake);
+			GiGeometryPool* pool = ::kernel()->acgiEntityManager()->pool();
 			for (int i = 0; i < worldGeometryStake.length(); i++)
 			{
 				GiEntityGeometry* entityGeometry = worldGeometryStake[i]->geometry();
@@ -183,8 +184,10 @@ void GiEntDraw::draw()
 					}
 					entity->appendPointGeometry((GiPointGeometry*)entityGeometry);
 				}
+				// stake 归还对象池
+				pool->releaseStake(worldGeometryStake[i]);
 			}
-			GI_IMP_ENTDRAW(this->m_pImpl)->pWorldGeometry->removeWorldGeometryStakes();
+			GI_IMP_ENTDRAW(this->m_pImpl)->pWorldGeometry->removeWorldGeometryStakesOnly();
 		}
 
 		// 高亮实体

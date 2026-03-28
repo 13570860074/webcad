@@ -55,6 +55,17 @@ GeInterval::~GeInterval()
 
 }
 
+GeInterval& GeInterval::operator=(const GeInterval& otherInterval) {
+    if (this != &otherInterval) {
+        this->m_Tol = otherInterval.m_Tol;
+        this->m_UpperParam = otherInterval.m_UpperParam;
+        this->m_LowerParam = otherInterval.m_LowerParam;
+        this->m_bBoundedAbove = otherInterval.m_bBoundedAbove;
+        this->m_bBoundedBelow = otherInterval.m_bBoundedBelow;
+    }
+    return *this;
+}
+
 double GeInterval::lowerBound() const
 {
     return this->m_LowerParam;

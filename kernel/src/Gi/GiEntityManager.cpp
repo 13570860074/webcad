@@ -212,9 +212,8 @@ void GiEntityManager::onBeginAnimationFrame(GiEntityManager* pointer) {
 	}
 }
 void GiEntityManager::onDocumentDestroyed(GiEntityManager* param, ApDocument* doc) {
-
-	//// 删除文档中的实体
-	//param->destroyed(doc);
+	// 文档销毁时清空对象池，真正释放内存
+	GI_IMP_ENTITYMANAGER(param->m_pImpl)->geometryPool->clear();
 
 	//// 删除文档中的实体可见性
 	//for (int i = 0; i < GI_IMP_ENTITYMANAGER(param->m_pImpl)->entityVisibilitys.length(); i++) {
@@ -387,4 +386,7 @@ GiEntity* GiEntityManager::queryEntity(const Gi::EntityType type, const Gi::Elem
 }
 GiEntityMutex* GiEntityManager::mutex() {
 	return GI_IMP_ENTITYMANAGER(this->m_pImpl)->entityMutex;
+}
+GiGeometryPool* GiEntityManager::pool() {
+	return GI_IMP_ENTITYMANAGER(this->m_pImpl)->geometryPool;
 }

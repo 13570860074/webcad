@@ -33,6 +33,9 @@ public:
 
     void removeWorldGeometryStakes();
 
+    /** 仅清空 stake 数组，不 delete 任何对象（对象已归还对象池） */
+    void removeWorldGeometryStakesOnly();
+
 
 public:
     virtual void getModelToWorldTransform(GeMatrix3d &) const;

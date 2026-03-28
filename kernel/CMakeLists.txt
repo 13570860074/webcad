@@ -435,6 +435,7 @@ add_library(
 	src/Gi/GiViewportDraw.cpp
 	src/Gi/GiViewportGeometry.cpp
 	src/Gi/GiEntDraw.cpp
+	src/Gi/GiGeometryPool.cpp
 	src/Gi/GiWorldDrawManager.cpp
 	src/Gi/GiEntityHighlander.cpp
 	# 几何范围

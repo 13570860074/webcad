@@ -71,7 +71,7 @@ double *GiMesh::vertexs()
 GiTriangleMeshGeometry *GiMesh::appendTriangleMeshGeometry(const GePoint3d &_vertex1, const GePoint3d &_vertex2, const GePoint3d &_vertex3)
 {
 
-    GiTriangleMeshGeometry *pTriangleMeshGeometry = new GiTriangleMeshGeometry();
+    GiTriangleMeshGeometry *pTriangleMeshGeometry = ::kernel()->acgiEntityManager()->pool()->acquireTriangleMesh();
     pTriangleMeshGeometry->setVertex(0, _vertex1);
     pTriangleMeshGeometry->setVertex(1, _vertex2);
     pTriangleMeshGeometry->setVertex(2, _vertex3);

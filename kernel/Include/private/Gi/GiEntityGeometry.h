@@ -28,7 +28,10 @@ public:
 
 	/** clone */
 	virtual GiEntityGeometry* clone() const;
-	
+
+	/** 归还对象池前重置基类状态 */
+	void poolReset();
+
 	/** stake */
 	DbEntityStake* stake() const;
 

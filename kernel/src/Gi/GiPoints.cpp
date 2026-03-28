@@ -61,7 +61,7 @@ double *GiPoints::vertexs() {
 #endif
 GiPointGeometry *GiPoints::appendPointGeometry(const GePoint3d &_position)
 {
-    GiPointGeometry *pPointGeometry = new GiPointGeometry();
+    GiPointGeometry *pPointGeometry = ::kernel()->acgiEntityManager()->pool()->acquirePoint();
     pPointGeometry->setPosition(_position);
     this->appendPointGeometry(pPointGeometry);
     return pPointGeometry;

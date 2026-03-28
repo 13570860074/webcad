@@ -18,6 +18,16 @@ GiEntityGeometry *GiEntityGeometry::clone() const
 	return NULL;
 }
 
+void GiEntityGeometry::poolReset()
+{
+	GiEntityGeometryImpl* imp = GI_IMP_ENTITYGEOMETRY(this->m_pImpl);
+	imp->isMark    = false;
+	imp->isErased  = false;
+	imp->visibility = true;
+	imp->giEntity  = NULL;
+	imp->stake     = NULL;
+}
+
 DbEntityStake* GiEntityGeometry::stake() const {
 	return  GI_IMP_ENTITYGEOMETRY(this->m_pImpl)->stake;
 }
